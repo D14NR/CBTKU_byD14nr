@@ -15,7 +15,7 @@ const app = express();
 // Middleware
 app.use(cors()); // Mengizinkan request dari domain lain (misalnya frontend di Vercel)
 app.use(express.json()); // Memungkinkan server membaca request body dalam format JSON
-app.use(express.static('frontend')); // Menyajikan file statis (index.html) dari folder 'frontend'
+app.use(express.static('-'));
 
 // Konfigurasi Supabase dari variabel lingkungan
 const SUPABASE_URL = process.env.SUPABASE_URL;
