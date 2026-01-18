@@ -292,10 +292,3 @@ app.post('/api/selesai-ujian', async (req, res) => {
     res.status(500).json({ success: false, message: e.message }); 
   }
 });
-
-
-// Jalankan server (ini hanya untuk testing lokal, Vercel akan mengabaikan bagian ini)
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server berjalan di http://localhost:${port}`);
-});
