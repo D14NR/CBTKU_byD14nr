@@ -3,7 +3,6 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const bcrypt = require('bcryptjs');
 
 // Load env dari .env saat lokal. Di Vercel, env diambil dari Environment Variables.
 dotenv.config();
@@ -63,7 +62,7 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
 function safeUser(u) {
   if (!u) return u;
   const copy = { ...u };
-  delete copy.password; // jangan pernah kirim password/hash ke client
+  delete copy.password; // jangan pernah kirim password ke client
   return copy;
 }
 
@@ -98,7 +97,7 @@ router.get('/agenda', async (req, res) => {
 });
 
 /**
- * POST /api/register
+ * POST /api/register  (PLAINTEXT PASSWORD)
  */
 router.post('/register', async (req, res) => {
   const form = req.body || {};
@@ -134,13 +133,11 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
-    // Hash password sebelum simpan
-    const passwordHash = await bcrypt.hash(String(form.password), 10);
-
+    // TANPA HASH: simpan password apa adanya (plaintext)
     const payload = {
       nama_peserta: String(form.nama).toUpperCase(),
       nis_username: username,
-      password: passwordHash, // simpan hash
+      password: String(form.password), // PLAINTEXT
       jenjang_studi: String(form.jenjang),
       kelas: String(form.kelas),
       asal_sekolah: String(form.sekolah),
@@ -170,7 +167,7 @@ router.post('/register', async (req, res) => {
 });
 
 /**
- * POST /api/login
+ * POST /api/login  (PLAINTEXT PASSWORD)
  * body: { u, p }
  */
 router.post('/login', async (req, res) => {
@@ -179,7 +176,7 @@ router.post('/login', async (req, res) => {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
 
     const userList = await supabaseRequest('peserta', 'GET', {
-      // ambil kolom yang perlu + password hash untuk compare
+      // ambil kolom yang perlu + password untuk dicek
       select:
         'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
       or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
@@ -196,8 +193,10 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Akun Nonaktif/Blokir' });
     }
 
-    const ok = await bcrypt.compare(String(p), String(user.password || ''));
-    if (!ok) return res.status(401).json({ success: false, message: 'Password salah' });
+    // TANPA HASH: cocokkan string langsung
+    if (String(user.password || '') !== String(p)) {
+      return res.status(401).json({ success: false, message: 'Password salah' });
+    }
 
     res.json({ success: true, data: safeUser(user) });
   } catch (e) {
@@ -410,6 +409,7 @@ app.use('/api', router);
 
 // Local run (tidak dipakai di Vercel serverless)
 if (require.main === module) {
-  app.listen(process.env.PORT || 3000);
+  app.listen(process.env.PORT || 3000, () => console.log('Server running'));
 }
+
 module.exports = app;
