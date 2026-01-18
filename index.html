@@ -9,10 +9,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
-    
+
     <style>
-        :root { 
-            --primary-red: #dc2626; 
+        :root {
+            --primary-red: #dc2626;
             --primary-red-hover: #b91c1c;
             --white: #ffffff;
             --light-bg: #f9fafb;
@@ -23,42 +23,42 @@
             --warning-orange: #f59e0b;
             --info-blue: #3b82f6;
         }
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: var(--light-bg); 
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--light-bg);
             color: var(--dark-text);
-            user-select: none; 
-            overflow-x: hidden; 
+            user-select: none;
+            overflow-x: hidden;
         }
-        
+
         /* AUTH & DASHBOARD */
-        .auth-container { 
-            min-height: 100vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            background: linear-gradient(135deg, var(--primary-red) 0%, #991b1b 100%); 
-            padding: 20px; 
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary-red) 0%, #991b1b 100%);
+            padding: 20px;
         }
-        .auth-card { 
-            background: var(--white); 
-            width: 100%; 
-            max-width: 900px; 
-            border-radius: 24px; 
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); 
+        .auth-card {
+            background: var(--white);
+            width: 100%;
+            max-width: 900px;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
             overflow: hidden;
             border: 1px solid rgba(255,255,255,0.2);
         }
-        .agenda-card { 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        .agenda-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border: 1px solid var(--border-color);
             border-radius: 16px;
             background: var(--white);
         }
-        .agenda-card:hover { 
-            transform: translateY(-6px); 
-            border-color: var(--primary-red); 
-            box-shadow: 0 20px 25px -5px rgba(220, 38, 38, 0.15); 
+        .agenda-card:hover {
+            transform: translateY(-6px);
+            border-color: var(--primary-red);
+            box-shadow: 0 20px 25px -5px rgba(220, 38, 38, 0.15);
         }
         .btn-primary-custom {
             background-color: var(--primary-red);
@@ -77,135 +77,135 @@
         }
 
         /* UJIAN LAYOUT */
-        .ujian-navbar { 
-            height: 70px; 
-            background: var(--white); 
-            border-bottom: 1px solid var(--border-color); 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; 
-            padding: 0 24px; 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            right: 0; 
-            z-index: 1030; 
+        .ujian-navbar {
+            height: 70px;
+            background: var(--white);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1030;
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
         }
-        .timer-badge { 
-            font-family: 'Inter', sans-serif; 
-            font-weight: 700; 
-            font-size: 1.1rem; 
-            background: var(--light-bg); 
-            color: var(--primary-red); 
-            padding: 10px 20px; 
-            border-radius: 12px; 
+        .timer-badge {
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+            background: var(--light-bg);
+            color: var(--primary-red);
+            padding: 10px 20px;
+            border-radius: 12px;
             border: 2px solid var(--border-color);
             letter-spacing: 0.05em;
         }
-        .timer-warning { 
-            background: #fef2f2; 
-            color: var(--primary-red); 
-            border-color: var(--primary-red); 
-            animation: pulse 1.5s infinite; 
+        .timer-warning {
+            background: #fef2f2;
+            color: var(--primary-red);
+            border-color: var(--primary-red);
+            animation: pulse 1.5s infinite;
         }
         .ujian-layout { margin-top: 90px; padding-bottom: 80px; }
-        .soal-card { 
-            background: var(--white); 
-            padding: 32px; 
-            border-radius: 20px; 
-            border: 1px solid var(--border-color); 
+        .soal-card {
+            background: var(--white);
+            padding: 32px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
             min-height: 400px;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
         }
-        
+
         /* SOAL ITEMS */
-        .option-item { 
-            display: flex; 
-            align-items: center; 
-            padding: 20px; 
-            margin-bottom: 16px; 
-            border: 2px solid var(--border-color); 
-            border-radius: 12px; 
-            cursor: pointer; 
-            transition: all 0.2s; 
+        .option-item {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .option-item:hover { 
-            background: var(--light-bg); 
-            border-color: var(--muted-text); 
+        .option-item:hover {
+            background: var(--light-bg);
+            border-color: var(--muted-text);
         }
-        .option-item.selected { 
-            background: #fee2e2; 
-            border-color: var(--primary-red); 
-            color: #7f1d1d; 
+        .option-item.selected {
+            background: #fee2e2;
+            border-color: var(--primary-red);
+            color: #7f1d1d;
         }
-        .option-label { 
-            width: 40px; 
-            height: 40px; 
-            background: var(--muted-text); 
-            color: var(--white); 
-            border-radius: 50%; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-weight: 700; 
-            margin-right: 16px; 
-            flex-shrink: 0; 
+        .option-label {
+            width: 40px;
+            height: 40px;
+            background: var(--muted-text);
+            color: var(--white);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin-right: 16px;
+            flex-shrink: 0;
         }
         .option-item.selected .option-label { background: var(--primary-red); }
 
         /* NAVIGASI */
         .nav-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-        .nav-item-btn { 
-            width: 100%; 
-            aspect-ratio: 1; 
-            border: 2px solid var(--border-color); 
-            background: var(--white); 
-            border-radius: 8px; 
-            font-weight: 600; 
-            color: var(--muted-text); 
+        .nav-item-btn {
+            width: 100%;
+            aspect-ratio: 1;
+            border: 2px solid var(--border-color);
+            background: var(--white);
+            border-radius: 8px;
+            font-weight: 600;
+            color: var(--muted-text);
             transition: all 0.2s;
         }
         .nav-item-btn:hover { border-color: var(--primary-red); color: var(--primary-red); }
         .nav-item-btn.active { border: 2px solid var(--primary-red); color: var(--primary-red); background: #fee2e2; }
         .nav-item-btn.filled { background: var(--primary-red); color: var(--white); border-color: var(--primary-red); }
         .nav-item-btn.ragu { background: var(--warning-orange); color: var(--white); border-color: var(--warning-orange); }
-        .ujian-footer { 
-            position: fixed; 
-            bottom: 0; 
-            left: 0; 
-            right: 0; 
-            background: var(--white); 
-            padding: 16px 24px; 
-            border-top: 1px solid var(--border-color); 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
+        .ujian-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--white);
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             z-index: 1020;
             box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
         }
-        
+
         /* LOADER & ANIMATION */
-        .loader-overlay { 
-            position: fixed; 
-            top:0; 
-            left:0; 
-            width:100%; 
-            height:100%; 
-            background: rgba(255,255,255,0.97); 
-            z-index: 9999; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
+        .loader-overlay {
+            position: fixed;
+            top:0;
+            left:0;
+            width:100%;
+            height:100%;
+            background: rgba(255,255,255,0.97);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-        .custom-loader { 
-            width: 50px; 
-            height: 50px; 
-            border: 5px solid var(--border-color); 
-            border-bottom-color: var(--primary-red); 
-            border-radius: 50%; 
-            animation: rotation 1s linear infinite; 
+        .custom-loader {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--border-color);
+            border-bottom-color: var(--primary-red);
+            border-radius: 50%;
+            animation: rotation 1s linear infinite;
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.05); } 100% { opacity: 1; transform: scale(1); } }
@@ -374,7 +374,7 @@
                 <h4 class="fw-bold mb-4">Agenda Tersedia</h4>
                 <div id="agendaListContainer" class="row g-3"></div>
             </div>
-            
+
             <!-- SECTION 2: TOKEN INPUT -->
             <div id="secToken" class="d-none animate__animated animate__fadeInRight">
                 <button class="btn btn-sm btn-light mb-3" onclick="Dashboard.backToAgenda()"><i class="bi bi-arrow-left"></i> Kembali</button>
@@ -476,14 +476,60 @@
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
     <script>
+        async function apiFetch(path, { method = 'GET', body, query } = {}) {
+            let url = path;
+            if (query) {
+                const qs = new URLSearchParams(query).toString();
+                url += `?${qs}`;
+            }
+
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: body ? JSON.stringify(body) : undefined
+            });
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+            return data;
+        }
+
         // GLOBAL STATE
         const App = {
-            state: { user: null, agendaId: null, mapelList: [], activeMapel: null, tempMapelId: null, soal: [], jawaban: [], ragu: [], endTime: 0, timer: null, currentSoalIdx: 0, dashInterval: null, cheatTimer: 30, cheatInterval: null, selectedLeftIndex: null },
-            ui: { 
-                load: (s,t='Memuat...')=>{ document.getElementById('loaderText').innerText=t; document.getElementById('loader').classList.toggle('d-none',!s); },
-                view: (id)=>{ ['viewAuth','viewDashboard','viewUjian'].forEach(v=>document.getElementById(v).classList.add('d-none')); document.getElementById(id).classList.remove('d-none'); }
+            state: {
+                user: null,
+                agendaId: null,
+                mapelList: [],
+                activeMapel: null,
+                tempMapelId: null,
+                soal: [],
+                jawaban: [],
+                ragu: [],
+                endTime: 0,
+                timer: null,
+                currentSoalIdx: 0,
+                dashInterval: null,
+                cheatTimer: 30,
+                cheatInterval: null,
+                selectedLeftIndex: null,
+                antiCheatInstalled: false,
+                saveDebounce: null
             },
-            data: { save:(k,v)=>localStorage.setItem(k,JSON.stringify(v)), get:(k)=>JSON.parse(localStorage.getItem(k)), remove:(k)=>localStorage.removeItem(k) }
+            ui: {
+                load: (s, t='Memuat...') => {
+                    document.getElementById('loaderText').innerText = t;
+                    document.getElementById('loader').classList.toggle('d-none', !s);
+                },
+                view: (id) => {
+                    ['viewAuth','viewDashboard','viewUjian'].forEach(v => document.getElementById(v).classList.add('d-none'));
+                    document.getElementById(id).classList.remove('d-none');
+                }
+            },
+            data: {
+                save:(k,v)=>localStorage.setItem(k,JSON.stringify(v)),
+                get:(k)=>JSON.parse(localStorage.getItem(k)),
+                remove:(k)=>localStorage.removeItem(k)
+            }
         };
 
         // MODULE: UI HELPERS
@@ -505,28 +551,120 @@
 
         // MODULE: AUTH
         const Auth = {
-            init: () => { const u = App.data.get('cbt_user'); if(u){ App.state.user = u; Dashboard.show(); } else { App.ui.view('viewAuth'); } },
-            login: (e) => { e.preventDefault(); App.ui.load(true,'Login...'); 
-                google.script.run.withSuccessHandler(r => { App.ui.load(false); 
-                    if(r.success){ App.state.user=r.data; App.data.save('cbt_user',r.data); Dashboard.show(); } 
-                    else Swal.fire({icon:'error', title:'Gagal', text: r.message, confirmButtonColor: '#dc2626'}); 
-                }).loginSiswa(document.getElementById('loginUser').value, document.getElementById('loginPass').value); 
+            init: () => {
+                const u = App.data.get('cbt_user');
+                if (u) {
+                    App.state.user = u;
+                    Dashboard.show();
+                } else {
+                    App.ui.view('viewAuth');
+                }
             },
-            register: (e) => { e.preventDefault(); App.ui.load(true,'Daftar...');
-                const f = { agenda_id:document.getElementById('regAgenda').value, nama:document.getElementById('regNama').value, jenjang:document.getElementById('regJenjang').value, kelas:document.getElementById('regKelas').value, sekolah:document.getElementById('regSekolah').value, no_wa:document.getElementById('regWa').value, wa_ortu:document.getElementById('regWaOrtu').value, password:document.getElementById('regPass').value, username:document.getElementById('regWa').value.replace(/\D/g,'').replace(/^0|^62/,'') };
-                google.script.run.withSuccessHandler(r=>{ App.ui.load(false); if(r.success){ document.getElementById('cardNama').innerText=f.nama; document.getElementById('cardUser').innerText=f.username; document.getElementById('cardPass').innerText=f.password; document.getElementById('cardAgenda').innerText=r.nama_agenda; new bootstrap.Modal(document.getElementById('modalKartu')).show(); e.target.reset(); } else Swal.fire({icon:'error', title:'Error', text: r.message, confirmButtonColor: '#dc2626'}); }).registrasiPeserta(f);
+
+            login: async (e) => {
+                e.preventDefault();
+                App.ui.load(true,'Login...');
+                try {
+                    const r = await apiFetch('/api/login', {
+                        method: 'POST',
+                        body: {
+                            u: document.getElementById('loginUser').value,
+                            p: document.getElementById('loginPass').value
+                        }
+                    });
+                    App.ui.load(false);
+
+                    if (r.success) {
+                        App.state.user = r.data;
+                        App.data.save('cbt_user', r.data);
+                        Dashboard.show();
+                    } else {
+                        Swal.fire({icon:'error', title:'Gagal', text: r.message, confirmButtonColor: '#dc2626'});
+                    }
+                } catch (err) {
+                    App.ui.load(false);
+                    Swal.fire({icon:'error', title:'Error', text: err.message, confirmButtonColor: '#dc2626'});
+                }
             },
-            loadAgendas: () => { const s=document.getElementById('regAgenda'); if(s.options.length>1)return; google.script.run.withSuccessHandler(r=>{ if(r.success) r.data.forEach(a=>s.innerHTML+=`<option value="${a.id}">${a.agenda_ujian}</option>`); }).getDaftarAgenda(); },
+
+            register: async (e) => {
+                e.preventDefault();
+                App.ui.load(true,'Daftar...');
+
+                const f = {
+                    agenda_id: document.getElementById('regAgenda').value,
+                    nama: document.getElementById('regNama').value,
+                    jenjang: document.getElementById('regJenjang').value,
+                    kelas: document.getElementById('regKelas').value,
+                    sekolah: document.getElementById('regSekolah').value,
+                    no_wa: document.getElementById('regWa').value,
+                    wa_ortu: document.getElementById('regWaOrtu').value,
+                    password: document.getElementById('regPass').value,
+                    username: document.getElementById('regWa').value.replace(/\D/g,'').replace(/^0|^62/,'')
+                };
+
+                try {
+                    const r = await apiFetch('/api/register', { method: 'POST', body: f });
+                    App.ui.load(false);
+
+                    if (r.success) {
+                        document.getElementById('cardNama').innerText = f.nama;
+                        document.getElementById('cardUser').innerText = f.username;
+                        document.getElementById('cardPass').innerText = f.password;
+                        document.getElementById('cardAgenda').innerText = r.nama_agenda || '-';
+                        new bootstrap.Modal(document.getElementById('modalKartu')).show();
+                        e.target.reset();
+                    } else {
+                        Swal.fire({icon:'error', title:'Error', text: r.message, confirmButtonColor: '#dc2626'});
+                    }
+                } catch (err) {
+                    App.ui.load(false);
+                    Swal.fire({icon:'error', title:'Error', text: err.message, confirmButtonColor: '#dc2626'});
+                }
+            },
+
+            loadAgendas: async () => {
+                const s = document.getElementById('regAgenda');
+                if (s.options.length > 1) return;
+
+                try {
+                    const r = await apiFetch('/api/agenda');
+                    s.innerHTML = '<option value="">Pilih Agenda</option>';
+                    (r.data || []).forEach(a => {
+                        s.innerHTML += `<option value="${a.id}">${a.agenda_ujian}</option>`;
+                    });
+                } catch (err) {
+                    s.innerHTML = '<option value="">Gagal memuat agenda</option>';
+                }
+            },
+
             logout: () => {
-                Swal.fire({icon:'question', title:'Keluar?', text:'Apakah Anda yakin ingin keluar?', showCancelButton:true, confirmButtonColor:'#dc2626', cancelButtonColor:'#6b7280', confirmButtonText:'Ya, Keluar'}).then((result)=>{ 
-                    if(result.isConfirmed){ 
-                        App.data.remove('cbt_user'); 
+                Swal.fire({
+                    icon:'question',
+                    title:'Keluar?',
+                    text:'Apakah Anda yakin ingin keluar?',
+                    showCancelButton:true,
+                    confirmButtonColor:'#dc2626',
+                    cancelButtonColor:'#6b7280',
+                    confirmButtonText:'Ya, Keluar'
+                }).then((result)=>{
+                    if(result.isConfirmed){
+                        App.data.remove('cbt_user');
                         if (App.state.dashInterval) clearInterval(App.state.dashInterval);
                         if (App.state.timer) clearInterval(App.state.timer);
                         if (App.state.cheatInterval) clearInterval(App.state.cheatInterval);
-                        App.state = { user: null, agendaId: null, mapelList: [], activeMapel: null, tempMapelId: null, soal: [], jawaban: [], ragu: [], endTime: 0, timer: null, currentSoalIdx: 0, dashInterval: null, cheatTimer: 30, cheatInterval: null, selectedLeftIndex: null };
-                        document.getElementById('loginUser').value = ''; document.getElementById('loginPass').value = '';
-                        App.ui.view('viewAuth'); 
+                        if (App.state.saveDebounce) clearTimeout(App.state.saveDebounce);
+
+                        App.state = {
+                            user: null, agendaId: null, mapelList: [], activeMapel: null, tempMapelId: null,
+                            soal: [], jawaban: [], ragu: [], endTime: 0, timer: null, currentSoalIdx: 0,
+                            dashInterval: null, cheatTimer: 30, cheatInterval: null, selectedLeftIndex: null,
+                            antiCheatInstalled: false, saveDebounce: null
+                        };
+
+                        document.getElementById('loginUser').value = '';
+                        document.getElementById('loginPass').value = '';
+                        App.ui.view('viewAuth');
                     }
                 });
             }
@@ -534,18 +672,25 @@
 
         // MODULE: DASHBOARD
         const Dashboard = {
-            show: () => {
-                App.ui.view('viewDashboard'); 
-                document.getElementById('dashNama').innerText = App.state.user.nama_peserta; 
+            show: async () => {
+                App.ui.view('viewDashboard');
+                document.getElementById('dashNama').innerText = App.state.user.nama_peserta;
                 document.getElementById('dashSekolah').innerText = App.state.user.asal_sekolah;
-                document.getElementById('secAgenda').classList.remove('d-none'); document.getElementById('secToken').classList.add('d-none'); document.getElementById('secMapel').classList.add('d-none');
-                
-                const cont = document.getElementById('agendaListContainer'); cont.innerHTML = '<div class="spinner-border text-danger"></div>';
-                google.script.run.withSuccessHandler(res => {
+
+                document.getElementById('secAgenda').classList.remove('d-none');
+                document.getElementById('secToken').classList.add('d-none');
+                document.getElementById('secMapel').classList.add('d-none');
+
+                const cont = document.getElementById('agendaListContainer');
+                cont.innerHTML = '<div class="spinner-border text-danger"></div>';
+
+                try {
+                    const res = await apiFetch('/api/agenda');
                     cont.innerHTML = '';
-                    if(res.success && res.data.length > 0) {
+
+                    if(res.success && (res.data || []).length > 0) {
                         if(App.state.dashInterval) clearInterval(App.state.dashInterval);
-                        
+
                         res.data.forEach(a => {
                             cont.innerHTML += `
                             <div class="col-md-6 col-lg-4">
@@ -561,50 +706,117 @@
                         const update = () => {
                             const now = new Date().getTime();
                             res.data.forEach(a => {
-                                const start = new Date(a.tgljam_mulai).getTime(), end = new Date(a.tgljam_selesai).getTime();
-                                const elC = document.getElementById(`count-${a.id}`), elB = document.getElementById(`btn-${a.id}`);
+                                const start = new Date(a.tgljam_mulai).getTime();
+                                const end = new Date(a.tgljam_selesai).getTime();
+                                const elC = document.getElementById(`count-${a.id}`);
+                                const elB = document.getElementById(`btn-${a.id}`);
                                 if(!elC) return;
-                                
+
                                 if(now < start) {
-                                    elC.innerText = 'Dimulai dlm: ' + Dashboard.fmt(start - now); elC.className = 'alert alert-warning border text-center fw-bold mb-3';
-                                    elB.disabled = true; elB.className = 'btn btn-secondary w-100 rounded-3 py-2';
+                                    elC.innerText = 'Dimulai dlm: ' + Dashboard.fmt(start - now);
+                                    elC.className = 'alert alert-warning border text-center fw-bold mb-3';
+                                    elB.disabled = true;
+                                    elB.className = 'btn btn-secondary w-100 rounded-3 py-2';
                                 } else if(now >= start && now <= end) {
-                                    elC.innerText = 'Sisa Waktu: ' + Dashboard.fmt(end - now); elC.className = 'alert alert-success border text-center fw-bold mb-3';
-                                    elB.disabled = false; elB.className = 'btn btn-primary-custom w-100 rounded-3 py-2';
+                                    elC.innerText = 'Sisa Waktu: ' + Dashboard.fmt(end - now);
+                                    elC.className = 'alert alert-success border text-center fw-bold mb-3';
+                                    elB.disabled = false;
+                                    elB.className = 'btn btn-primary-custom w-100 rounded-3 py-2';
                                 } else {
-                                    elC.innerText = 'BERAKHIR'; elC.className = 'alert alert-danger border text-center fw-bold mb-3';
-                                    elB.disabled = true; elB.className = 'btn btn-secondary w-100 rounded-3 py-2';
+                                    elC.innerText = 'BERAKHIR';
+                                    elC.className = 'alert alert-danger border text-center fw-bold mb-3';
+                                    elB.disabled = true;
+                                    elB.className = 'btn btn-secondary w-100 rounded-3 py-2';
                                 }
                             });
                         };
-                        update(); App.state.dashInterval = setInterval(update, 1000);
-                    } else cont.innerHTML = '<div class="col-12 text-center text-muted">Tidak ada agenda aktif.</div>';
-                }).getDaftarAgenda();
+
+                        update();
+                        App.state.dashInterval = setInterval(update, 1000);
+                    } else {
+                        cont.innerHTML = '<div class="col-12 text-center text-muted">Tidak ada agenda aktif.</div>';
+                    }
+                } catch (err) {
+                    cont.innerHTML = `<div class="col-12 text-center text-danger">Gagal load agenda: ${err.message}</div>`;
+                }
             },
+
             fmt: (ms) => {
-                const d=Math.floor(ms/86400000), h=Math.floor((ms%86400000)/3600000), m=Math.floor((ms%3600000)/60000), s=Math.floor((ms%60000)/1000);
+                const d=Math.floor(ms/86400000),
+                      h=Math.floor((ms%86400000)/3600000),
+                      m=Math.floor((ms%3600000)/60000),
+                      s=Math.floor((ms%60000)/1000);
                 return (d>0?d+'h ':'') + h + 'j ' + m + 'm ' + s + 'd';
             },
-            openToken: (id, name) => { App.state.agendaId = id; document.getElementById('secAgenda').classList.add('d-none'); document.getElementById('secToken').classList.remove('d-none'); document.getElementById('tokenAgendaName').innerText = name; document.getElementById('inputToken').value=''; },
-            backToAgenda: () => { document.getElementById('secToken').classList.add('d-none'); document.getElementById('secMapel').classList.add('d-none'); document.getElementById('secAgenda').classList.remove('d-none'); },
-            verifyToken: () => {
-                const t = document.getElementById('inputToken').value.trim(); if(!t) return;
-                App.ui.load(true); google.script.run.withSuccessHandler(r => { if(r.success) Dashboard.refreshMapel(); else { App.ui.load(false); Swal.fire({icon:'error', title:'Gagal', text: r.message, confirmButtonColor: '#dc2626'}); } }).verifikasiDanAmbilMapel(App.state.agendaId, t);
+
+            openToken: (id, name) => {
+                App.state.agendaId = id;
+                document.getElementById('secAgenda').classList.add('d-none');
+                document.getElementById('secToken').classList.remove('d-none');
+                document.getElementById('tokenAgendaName').innerText = name;
+                document.getElementById('inputToken').value='';
             },
-            refreshMapel: () => {
-                App.ui.view('viewDashboard');
-                google.script.run.withSuccessHandler(r => { App.ui.load(false); if(r.success){ App.state.mapelList=r.data; Dashboard.showMapel(); } }).getMapelSiswa(App.state.agendaId, App.state.user.id);
+
+            backToAgenda: () => {
+                document.getElementById('secToken').classList.add('d-none');
+                document.getElementById('secMapel').classList.add('d-none');
+                document.getElementById('secAgenda').classList.remove('d-none');
             },
+
+            verifyToken: async () => {
+                const t = document.getElementById('inputToken').value.trim();
+                if(!t) return;
+
+                App.ui.load(true,'Verifikasi Token...');
+                try {
+                    const r = await apiFetch('/api/verify-token', {
+                        method: 'POST',
+                        body: { agenda_id: App.state.agendaId, token: t }
+                    });
+                    if (r.success) {
+                        await Dashboard.refreshMapel();
+                    } else {
+                        App.ui.load(false);
+                        Swal.fire({icon:'error', title:'Gagal', text: r.message, confirmButtonColor: '#dc2626'});
+                    }
+                } catch (err) {
+                    App.ui.load(false);
+                    Swal.fire({icon:'error', title:'Error', text: err.message, confirmButtonColor: '#dc2626'});
+                }
+            },
+
+            refreshMapel: async () => {
+                try {
+                    const r = await apiFetch('/api/mapel', {
+                        query: { agenda_id: App.state.agendaId, peserta_id: App.state.user.id }
+                    });
+                    App.ui.load(false);
+                    if(r.success){
+                        App.state.mapelList = r.data || [];
+                        Dashboard.showMapel();
+                    } else {
+                        Swal.fire({icon:'error', title:'Error', text:r.message, confirmButtonColor:'#dc2626'});
+                    }
+                } catch (err) {
+                    App.ui.load(false);
+                    Swal.fire({icon:'error', title:'Error', text: err.message, confirmButtonColor:'#dc2626'});
+                }
+            },
+
             showMapel: () => {
-                document.getElementById('secToken').classList.add('d-none'); 
+                document.getElementById('secToken').classList.add('d-none');
                 document.getElementById('secMapel').classList.remove('d-none');
-                
-                const cont = document.getElementById('mapelListContainer'); 
+
+                const cont = document.getElementById('mapelListContainer');
                 cont.innerHTML = '';
-                
+
                 App.state.mapelList.forEach(m => {
-                    let status = m.status_kerjakan; if(status) status = status.trim(); 
-                    let btn = ''; let cardClass = '';
+                    let status = m.status_kerjakan;
+                    if(status) status = status.trim();
+
+                    let btn = '';
+                    let cardClass = '';
+
                     if(status === 'Selesai') {
                         btn = `<button class="btn btn-secondary w-100 rounded-3 py-2 fw-bold" disabled><i class="bi bi-check-circle-fill"></i> SELESAI</button>`;
                         cardClass = 'bg-light border-success';
@@ -614,6 +826,7 @@
                     } else {
                         btn = `<button class="btn btn-primary-custom w-100 rounded-3 py-2 fw-bold" onclick="Exam.confirm(${m.id})">MULAI KERJAKAN</button>`;
                     }
+
                     cont.innerHTML += `
                     <div class="col-md-6">
                         <div class="card shadow-sm rounded-4 p-3 h-100 ${cardClass}">
@@ -631,76 +844,98 @@
         };
 
         // MODULE: EXAM ENGINE
-      const Exam = {
+        const Exam = {
             confirm: (mid) => {
                 App.state.tempMapelId = mid;
-                document.getElementById('checkAgree').checked = false; document.getElementById('btnStartReal').disabled = true;
+                document.getElementById('checkAgree').checked = false;
+                document.getElementById('btnStartReal').disabled = true;
                 new bootstrap.Modal(document.getElementById('modalRules')).show();
-                document.getElementById('checkAgree').onchange = (e) => document.getElementById('btnStartReal').disabled = !e.target.checked;
+                document.getElementById('checkAgree').onchange = (e) => {
+                    document.getElementById('btnStartReal').disabled = !e.target.checked;
+                };
             },
-            
-            startReal: () => {
+
+            startReal: async () => {
                 bootstrap.Modal.getInstance(document.getElementById('modalRules')).hide();
                 App.ui.load(true, 'Menyiapkan Soal...');
-                google.script.run.withSuccessHandler(r => { App.ui.load(false);
+
+                try {
+                    const r = await apiFetch('/api/get-soal', {
+                        method: 'POST',
+                        body: {
+                            agenda_id: App.state.agendaId,
+                            peserta_id: App.state.user.id,
+                            mapel_id: App.state.tempMapelId
+                        }
+                    });
+
+                    App.ui.load(false);
+
                     if(r.success) {
-                        if(r.status === 'Selesai') { Swal.fire({icon:'info', title:'Info', text:'Ujian ini sudah Anda selesaikan.', confirmButtonColor:'#dc2626'}).then(() => Dashboard.refreshMapel()); return; }
-                        
+                        if(r.status === 'Selesai') {
+                            Swal.fire({icon:'info', title:'Info', text:'Ujian ini sudah Anda selesaikan.', confirmButtonColor:'#dc2626'})
+                                .then(() => Dashboard.refreshMapel());
+                            return;
+                        }
+
                         App.state.soal = r.data_soal;
                         App.state.activeMapel = r.mapel_detail;
                         App.state.jawaban = r.jawaban_sebelumnya ? r.jawaban_sebelumnya.split('|') : Array(r.data_soal.length).fill('-');
                         App.state.ragu = Array(r.data_soal.length).fill(false);
                         App.state.endTime = new Date(r.waktu_mulai).getTime() + (r.mapel_detail.durasi_ujian * 60000);
-                        
+
                         App.ui.view('viewUjian');
                         App.state.currentSoalIdx = 0;
                         Exam.renderSoal();
                         Exam.timer();
                         Exam.antiCheat();
-                    } else Swal.fire({icon:'error', title:'Error', text:r.message, confirmButtonColor:'#dc2626'});
-                }).getSoalUjian(App.state.agendaId, App.state.user.id, App.state.tempMapelId);
+                    } else {
+                        Swal.fire({icon:'error', title:'Error', text:r.message, confirmButtonColor:'#dc2626'});
+                    }
+                } catch (err) {
+                    App.ui.load(false);
+                    Swal.fire({icon:'error', title:'Error', text: err.message, confirmButtonColor:'#dc2626'});
+                }
             },
 
-             renderSoal: () => {
+            renderSoal: () => {
                 const s = App.state.soal[App.state.currentSoalIdx];
-                const j = App.state.jawaban[App.state.currentSoalIdx]; 
+                const j = App.state.jawaban[App.state.currentSoalIdx];
                 const rawType = s.type_soal || 'Pilihan Ganda';
-                const type = rawType.trim(); 
-                
+                const type = rawType.trim();
+
                 document.getElementById('ujianMapelName').innerText = App.state.activeMapel.nama_mata_pelajaran || 'Ujian';
                 document.getElementById('checkRagu').checked = App.state.ragu[App.state.currentSoalIdx];
 
                 let h = `<div class="d-flex justify-content-between align-items-center mb-4"><span class="badge bg-danger rounded-pill px-3 py-2 fs-6">Soal No ${App.state.currentSoalIdx+1}</span><span class="badge bg-light text-dark border fs-6">${type}</span></div>`;
-                
+
                 if(s.gambar_url) h += `<div class="text-center mb-4"><img src="${s.gambar_url}" class="img-fluid rounded shadow-sm" style="max-height:300px"></div>`;
                 h += `<div class="fs-5 mb-4 lh-base">${s.pertanyaan}</div>`;
 
-                // --- LOGIKA RENDER ---
-                
                 // 1. PG KOMPLEKS
                 if (type.includes('Kompleks')) {
                     h += `<div class="alert alert-info py-2 small mb-4"><i class="bi bi-info-circle"></i> Pilih lebih dari satu jawaban.</div>`;
                     ['a','b','c','d','e'].forEach(o => {
                         const txt = s[`pilihan_${o}`];
                         if(txt && txt !== "") {
-                            const isChecked = j.includes(o.toUpperCase());
+                            const isChecked = (j || '').includes(o.toUpperCase());
                             const selClass = isChecked ? 'selected' : '';
                             const icon = isChecked ? '<i class="bi bi-check-square-fill text-danger fs-5"></i>' : '<i class="bi bi-square text-secondary fs-5"></i>';
                             h += `<div class="option-item ${selClass}" onclick="Exam.ansPGComplex('${o.toUpperCase()}')"><div class="option-label">${o.toUpperCase()}</div><div class="flex-grow-1">${txt}</div><div>${icon}</div></div>`;
                         }
                     });
                 }
-                
+
                 // 2. TIPE TABEL (PERNYATAAN 1-8)
                 else if (type.includes('Benar') || type.includes('Salah') || type.includes('Setuju') || type.includes('Tidak')) {
                     const isBS = (type.includes('Benar') || type.includes('Salah'));
                     const col1 = isBS ? 'Benar (B)' : 'Setuju (S)';
                     const col2 = isBS ? 'Salah (S)' : 'Tidak (T)';
-                    const val1 = isBS ? 'B' : 'S'; 
+                    const val1 = isBS ? 'B' : 'S';
                     const val2 = isBS ? 'S' : 'T';
 
                     h += `<div class="table-responsive"><table class="table table-bordered align-middle"><thead class="table-light text-center"><tr><th class="text-start">Pernyataan</th><th style="width:120px">${col1}</th><th style="width:120px">${col2}</th></tr></thead><tbody>`;
-                    
+
                     let adaPernyataan = false;
                     for(let i=1; i<=8; i++) {
                         const txt = s[`pernyataan_${i}`];
@@ -708,7 +943,7 @@
                             adaPernyataan = true;
                             const dataIndex = i - 1;
                             const currentVal = (j && j.length > dataIndex) ? j[dataIndex] : '-';
-                            
+
                             h += `<tr><td class="align-middle">${txt}</td>
                                     <td class="text-center align-middle"><input type="radio" class="form-check-input fs-4" style="cursor:pointer" name="row_${dataIndex}" ${currentVal === val1 ? 'checked' : ''} onclick="Exam.ansTable(${dataIndex}, '${val1}')"></td>
                                     <td class="text-center align-middle"><input type="radio" class="form-check-input fs-4" style="cursor:pointer" name="row_${dataIndex}" ${currentVal === val2 ? 'checked' : ''} onclick="Exam.ansTable(${dataIndex}, '${val2}')"></td>
@@ -721,17 +956,17 @@
                     h += `</tbody></table></div>`;
                 }
 
-                // 3. PENJODOHAN (DENGAN TABEL KONEKSI)
+                // 3. PENJODOHAN
                 else if (type.includes('Penjodohan') || type.includes('Menjodohkan')) {
                     h += `<div class="alert alert-info py-2 small mb-4"><i class="bi bi-info-circle"></i> Klik pernyataan di kiri, lalu klik jawaban di kanan untuk menjodohkannya.</div>`;
-                    
+
                     const leftStatements = [];
                     const rightStatements = [];
                     for(let i=1; i<=8; i++) {
                         if(s[`pernyataan_kiri_${i}`] && s[`pernyataan_kiri_${i}`].trim() !== '') leftStatements.push({ index: i, text: s[`pernyataan_kiri_${i}`] });
                         if(s[`pernyataan_kanan_${i}`] && s[`pernyataan_kanan_${i}`].trim() !== '') rightStatements.push({ letter: String.fromCharCode(64 + i), text: s[`pernyataan_kanan_${i}`] });
                     }
-                    
+
                     App.state.selectedLeftIndex = null;
 
                     h += `<div class="connection-grid">`;
@@ -751,11 +986,11 @@
 
                 // 4. ESSAY
                 else if (type.includes('Uraian') || type.includes('Essay')) {
-                    h += `<textarea class="form-control rounded-3 p-3" rows="6" placeholder="Ketik jawaban Anda disini..." oninput="Exam.ansEssay(this.value)">${j==='-'?'':j}</textarea>`;
+                    h += `<textarea class="form-control rounded-3 p-3" rows="6" placeholder="Ketik jawaban Anda disini..." oninput="Exam.ansEssay(this.value)">${j==='-'?'':(j||'')}</textarea>`;
                 }
 
                 // 5. DEFAULT: PG TUNGGAL
-                else { 
+                else {
                     ['a','b','c','d','e'].forEach(o => {
                         const txt = s[`pilihan_${o}`];
                         if(txt && txt !== "") {
@@ -775,22 +1010,33 @@
             // --- LOGIKA MENJAWAB ---
             ansPGSingle: (val) => { Exam.saveAnswer(val); Exam.renderSoal(); },
             ansPGComplex: (val) => {
-                let current = App.state.jawaban[App.state.currentSoalIdx]; if(current === '-') current = '';
+                let current = App.state.jawaban[App.state.currentSoalIdx];
+                if(current === '-') current = '';
                 let arr = current.split('');
                 if(arr.includes(val)) arr = arr.filter(x => x !== val); else arr.push(val);
-                let newVal = arr.sort().join(''); if(newVal === '') newVal = '-';
-                Exam.saveAnswer(newVal); Exam.renderSoal();
+                let newVal = arr.sort().join('');
+                if(newVal === '') newVal = '-';
+                Exam.saveAnswer(newVal);
+                Exam.renderSoal();
             },
+
             ansTable: (rowIndex, val) => {
                 let current = App.state.jawaban[App.state.currentSoalIdx];
                 const s = App.state.soal[App.state.currentSoalIdx];
+
                 let statementCount = 0;
-                for(let i=1; i<=8; i++) { if(s[`pernyataan_${i}`] && s[`pernyataan_${i}`].trim() !== '') statementCount++; }
+                for(let i=1; i<=8; i++) {
+                    if(s[`pernyataan_${i}`] && s[`pernyataan_${i}`].trim() !== '') statementCount++;
+                }
+
                 if(!current || current === '-' || current.length < statementCount) current = Array(statementCount).fill('-').join('');
-                let arr = current.split(''); arr[rowIndex] = val;
-                Exam.saveAnswer(arr.join('')); Exam.navUpdate(); 
+                let arr = current.split('');
+                arr[rowIndex] = val;
+
+                Exam.saveAnswer(arr.join(''));
+                Exam.navUpdate();
             },
-            
+
             handleConnectionClick: (event) => {
                 const target = event.target;
                 if (!target.classList.contains('connection-item')) return;
@@ -829,11 +1075,16 @@
                 App.state.selectedLeftIndex = null;
                 document.querySelectorAll('.left-item').forEach(item => item.classList.remove('active-left'));
 
-                const newAnswerString = Object.keys(answers).map(Number).sort((a, b) => a - b).map(num => `${num}${answers[num]}`).join('');
+                const newAnswerString = Object.keys(answers)
+                    .map(Number)
+                    .sort((a, b) => a - b)
+                    .map(num => `${num}${answers[num]}`)
+                    .join('');
+
                 Exam.saveAnswer(newAnswerString || '-');
                 Exam.renderConnections();
             },
-            
+
             renderConnections: () => {
                 const answerString = App.state.jawaban[App.state.currentSoalIdx] || '-';
                 const answers = {};
@@ -845,9 +1096,7 @@
                     }
                 }
 
-                document.querySelectorAll('.connection-item').forEach(item => {
-                    item.classList.remove('connected');
-                });
+                document.querySelectorAll('.connection-item').forEach(item => item.classList.remove('connected'));
 
                 Object.keys(answers).forEach(num => {
                     const letter = answers[num];
@@ -872,75 +1121,174 @@
             },
 
             ansEssay: (val) => { Exam.saveAnswer(val); },
+
+            queueSaveToServer: () => {
+                if (App.state.saveDebounce) clearTimeout(App.state.saveDebounce);
+                App.state.saveDebounce = setTimeout(async () => {
+                    try {
+                        const str = App.state.jawaban.map(j=>j||'-').join('|');
+                        await apiFetch('/api/save-jawaban', {
+                            method: 'POST',
+                            body: {
+                                pid: App.state.user.id,
+                                aid: App.state.agendaId,
+                                mid: App.state.activeMapel.id,
+                                jwb: str
+                            }
+                        });
+                    } catch (e) {
+                        // sengaja silent biar tidak ganggu ujian; kalau mau tampilkan bisa
+                        console.warn('Autosave gagal:', e.message);
+                    }
+                }, 800);
+            },
+
             saveAnswer: (val) => {
                 App.state.jawaban[App.state.currentSoalIdx] = val || '-';
                 App.data.save(`ans_${App.state.activeMapel.id}`, App.state.jawaban);
                 Exam.navUpdate();
+                Exam.queueSaveToServer();
             },
 
-            toggleRagu: () => { App.state.ragu[App.state.currentSoalIdx] = document.getElementById('checkRagu').checked; Exam.navUpdate(); },
-            navSoal: (d) => { App.state.currentSoalIdx += d; Exam.renderSoal(); },
-            
+            toggleRagu: () => {
+                App.state.ragu[App.state.currentSoalIdx] = document.getElementById('checkRagu').checked;
+                Exam.navUpdate();
+            },
+
+            navSoal: (d) => {
+                const next = App.state.currentSoalIdx + d;
+                App.state.currentSoalIdx = Math.max(0, Math.min(next, App.state.soal.length - 1));
+                Exam.renderSoal();
+            },
+
             navUpdate: () => {
                 document.getElementById('btnPrev').disabled = App.state.currentSoalIdx === 0;
                 const bn = document.getElementById('btnNext');
-                if(App.state.currentSoalIdx === App.state.soal.length - 1) { bn.innerHTML = 'SELESAI'; bn.className = 'btn btn-danger rounded-pill fw-bold px-4'; bn.onclick = () => Exam.finish(false); }
-                else { bn.innerHTML = 'Selanjutnya'; bn.className = 'btn btn-danger rounded-pill fw-bold px-4'; bn.onclick = () => Exam.navSoal(1); }
-                
-                const g = document.getElementById('navGridDesktop'); g.innerHTML = '';
+                if(App.state.currentSoalIdx === App.state.soal.length - 1) {
+                    bn.innerHTML = 'SELESAI';
+                    bn.className = 'btn btn-danger rounded-pill fw-bold px-4';
+                    bn.onclick = () => Exam.finish(false);
+                } else {
+                    bn.innerHTML = 'Selanjutnya';
+                    bn.className = 'btn btn-danger rounded-pill fw-bold px-4';
+                    bn.onclick = () => Exam.navSoal(1);
+                }
+
+                const g = document.getElementById('navGridDesktop');
+                g.innerHTML = '';
                 App.state.soal.forEach((_, i) => {
-                    let c = ''; if(i===App.state.currentSoalIdx) c='active'; else if(App.state.ragu[i]) c='ragu'; else if(App.state.jawaban[i]!=='-') c='filled';
+                    let c = '';
+                    if(i===App.state.currentSoalIdx) c='active';
+                    else if(App.state.ragu[i]) c='ragu';
+                    else if(App.state.jawaban[i] && App.state.jawaban[i] !== '-') c='filled';
                     g.innerHTML += `<button class="nav-item-btn ${c}" onclick="App.state.currentSoalIdx=${i};Exam.renderSoal()">${i+1}</button>`;
                 });
             },
-            
+
             timer: () => {
                 if(App.state.timer) clearInterval(App.state.timer);
                 App.state.timer = setInterval(() => {
                     const diff = App.state.endTime - Date.now();
-                    if(diff < 0) { clearInterval(App.state.timer); Exam.finish(true); return; }
-                    const h=Math.floor(diff/3600000), m=Math.floor((diff%3600000)/60000), s=Math.floor((diff%60000)/1000);
+                    if(diff < 0) {
+                        clearInterval(App.state.timer);
+                        Exam.finish(true);
+                        return;
+                    }
+                    const h=Math.floor(diff/3600000),
+                          m=Math.floor((diff%3600000)/60000),
+                          s=Math.floor((diff%60000)/1000);
                     const timerEl = document.getElementById('timerDisplay');
                     timerEl.innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
                     if(diff < 300000) timerEl.classList.add('timer-warning');
                 }, 1000);
             },
+
             antiCheat: () => {
+                if (App.state.antiCheatInstalled) return;
+                App.state.antiCheatInstalled = true;
+
                 document.addEventListener('visibilitychange', () => {
                     if(document.hidden && !document.getElementById('viewUjian').classList.contains('d-none')) {
                         new bootstrap.Modal(document.getElementById('modalViolation')).show();
-                        App.state.cheatTimer = 30; document.getElementById('violationTimer').innerText = 30;
-                        document.getElementById('btnResumeExam').classList.remove('d-none'); document.getElementById('btnForceFinish').classList.add('d-none');
+                        App.state.cheatTimer = 30;
+                        document.getElementById('violationTimer').innerText = 30;
+                        document.getElementById('btnResumeExam').classList.remove('d-none');
+                        document.getElementById('btnForceFinish').classList.add('d-none');
+
                         if(App.state.cheatInterval) clearInterval(App.state.cheatInterval);
                         App.state.cheatInterval = setInterval(() => {
-                            App.state.cheatTimer--; document.getElementById('violationTimer').innerText = App.state.cheatTimer;
+                            App.state.cheatTimer--;
+                            document.getElementById('violationTimer').innerText = App.state.cheatTimer;
                             if(App.state.cheatTimer <= 0) {
-                                clearInterval(App.state.cheatInterval); document.getElementById('violationTimer').innerText = "WAKTU HABIS";
-                                document.getElementById('btnResumeExam').classList.add('d-none'); document.getElementById('btnForceFinish').classList.remove('d-none');
+                                clearInterval(App.state.cheatInterval);
+                                document.getElementById('violationTimer').innerText = "WAKTU HABIS";
+                                document.getElementById('btnResumeExam').classList.add('d-none');
+                                document.getElementById('btnForceFinish').classList.remove('d-none');
                                 document.getElementById('btnForceFinish').onclick = () => Exam.finish(true);
                             }
                         }, 1000);
                     }
                 });
             },
-            resume: () => { clearInterval(App.state.cheatInterval); bootstrap.Modal.getInstance(document.getElementById('modalViolation')).hide(); },
-            finish: (force) => {
+
+            resume: () => {
+                clearInterval(App.state.cheatInterval);
+                bootstrap.Modal.getInstance(document.getElementById('modalViolation')).hide();
+            },
+
+            finish: async (force) => {
                 if(!force && !confirm('Yakin ingin menyelesaikan ujian?')) return;
-                App.ui.load(true, 'Menyimpan...'); clearInterval(App.state.timer); clearInterval(App.state.cheatInterval);
+
+                App.ui.load(true, 'Menyimpan...');
+                clearInterval(App.state.timer);
+                clearInterval(App.state.cheatInterval);
+
                 const str = App.state.jawaban.map(j=>j||'-').join('|');
-                google.script.run.withSuccessHandler(r => {
+
+                try {
+                    const r = await apiFetch('/api/selesai-ujian', {
+                        method: 'POST',
+                        body: {
+                            pid: App.state.user.id,
+                            aid: App.state.agendaId,
+                            mid: App.state.activeMapel.id,
+                            jwb: str
+                        }
+                    });
+
                     App.ui.load(false);
-                    const vModal = bootstrap.Modal.getInstance(document.getElementById('modalViolation')); if(vModal) vModal.hide();
-                    if(r.success) { Swal.fire({icon:'success', title:'Sukses', text:'Ujian telah selesai dan disimpan.', confirmButtonColor:'#10b981'}).then(() => Dashboard.refreshMapel()); }
-                    else Swal.fire({icon:'error', title:'Error', text:r.message, confirmButtonColor:'#dc2626'});
-                }).selesaiUjian(App.state.user.id, App.state.agendaId, App.state.activeMapel.id, str);
+                    const vModal = bootstrap.Modal.getInstance(document.getElementById('modalViolation'));
+                    if(vModal) vModal.hide();
+
+                    if(r.success) {
+                        Swal.fire({icon:'success', title:'Sukses', text:'Ujian telah selesai dan disimpan.', confirmButtonColor:'#10b981'})
+                            .then(() => Dashboard.refreshMapel());
+                    } else {
+                        Swal.fire({icon:'error', title:'Error', text:r.message, confirmButtonColor:'#dc2626'});
+                    }
+                } catch (err) {
+                    App.ui.load(false);
+                    Swal.fire({icon:'error', title:'Error', text: err.message, confirmButtonColor:'#dc2626'});
+                }
             }
         };
 
         // EXPORTS
-        window.loadAgendaDropdown = Auth.loadAgendas; 
-        window.downloadKartu = () => html2canvas(document.getElementById('kartuArea')).then(c => { const a=document.createElement('a'); a.download='Kartu Peserta CBT PRO.png'; a.href=c.toDataURL(); a.click(); });
-        window.tutupKartuKeLogin = () => { bootstrap.Modal.getInstance(document.getElementById('modalKartu')).hide(); document.querySelector('[data-bs-target="#tabLogin"]').click(); };
+        window.loadAgendaDropdown = Auth.loadAgendas;
+        window.downloadKartu = () => html2canvas(document.getElementById('kartuArea')).then(c => {
+            const a=document.createElement('a');
+            a.download='Kartu Peserta CBT PRO.png';
+            a.href=c.toDataURL();
+            a.click();
+        });
+        window.tutupKartuKeLogin = () => {
+            bootstrap.Modal.getInstance(document.getElementById('modalKartu')).hide();
+            document.querySelector('[data-bs-target="#tabLogin"]').click();
+        };
+        window.Auth = Auth;
+        window.Dashboard = Dashboard;
+        window.Exam = Exam;
+        window.Ui = Ui;
         window.onload = Auth.init;
     </script>
 </body>
