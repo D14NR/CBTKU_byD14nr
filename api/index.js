@@ -410,8 +410,6 @@ app.use('/api', router);
 
 // Local run (tidak dipakai di Vercel serverless)
 if (require.main === module) {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server jalan di http://localhost:${PORT}`));
+  app.listen(process.env.PORT || 3000);
 }
-
 module.exports = app;
