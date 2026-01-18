@@ -341,6 +341,30 @@
             color: var(--white);
         }
 
+        .countdown-timer {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            font-size: 16px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: var(--gray-100);
+            display: inline-block;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .countdown-timer.warning {
+            background: var(--warning-orange);
+            color: var(--white);
+            animation: pulse 2s infinite;
+        }
+
+        .countdown-timer.danger {
+            background: var(--primary-red);
+            color: var(--white);
+            animation: pulse 1s infinite;
+        }
+
         /* Token Section */
         .token-container {
             max-width: 500px;
@@ -376,6 +400,28 @@
             position: absolute;
             top: 16px;
             right: 16px;
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* History Section */
+        .history-card {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border-left: 4px solid var(--primary-red);
+            transition: var(--transition-all);
+        }
+
+        .history-card:hover {
+            transform: translateX(4px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .history-status {
             padding: 4px 12px;
             border-radius: 50px;
             font-size: 12px;
@@ -423,6 +469,12 @@
             border-color: var(--primary-red);
             color: var(--primary-red);
             animation: pulse 2s infinite;
+        }
+
+        .exam-timer.danger {
+            background: var(--primary-red);
+            color: var(--white);
+            animation: pulse 1s infinite;
         }
 
         @keyframes pulse {
@@ -741,26 +793,92 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
+        /* Responsive Design */
+        @media (max-width: 992px) {
             .auth-content {
-                padding: 24px;
+                padding: 32px 24px;
             }
-
+            
             .exam-navbar {
                 padding: 0 16px;
+                flex-direction: column;
+                height: auto;
+                padding: 16px;
+                gap: 12px;
             }
-
+            
+            .exam-container {
+                padding-top: 120px;
+            }
+            
             .exam-footer {
                 padding: 12px 16px;
+                flex-wrap: wrap;
+                gap: 12px;
             }
-
+            
             .matching-container {
                 grid-template-columns: 1fr;
             }
+        }
 
+        @media (max-width: 768px) {
+            .auth-content {
+                padding: 24px 16px;
+            }
+            
+            .btn {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            
+            .agenda-card {
+                padding: 16px;
+            }
+            
+            .mapel-card {
+                padding: 16px;
+            }
+            
+            .question-card {
+                padding: 20px;
+            }
+            
             .nav-grid {
                 grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            }
+            
+            .exam-timer {
+                font-size: 18px;
+                padding: 8px 16px;
+            }
+            
+            .token-input {
+                font-size: 24px;
+                letter-spacing: 8px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .auth-card {
+                border-radius: 20px;
+            }
+            
+            .dashboard-header {
+                padding: 16px 0;
+            }
+            
+            .container {
+                padding-left: 16px;
+                padding-right: 16px;
+            }
+            
+            .stats-card {
+                padding: 16px;
+            }
+            
+            .stats-number {
+                font-size: 24px;
             }
         }
 
@@ -795,9 +913,67 @@
             from { transform: translateY(100%); }
             to { transform: translateY(0); }
         }
+
+        /* Floating Action Button */
+        .fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-red) 0%, var(--primary-red-dark) 100%);
+            color: var(--white);
+            border: none;
+            box-shadow: var(--shadow-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            transition: var(--transition-all);
+            z-index: 1000;
+        }
+
+        .fab:hover {
+            transform: scale(1.1);
+            box-shadow: var(--shadow-xl);
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .connection-status.online {
+            background: var(--success-green);
+            color: var(--white);
+        }
+
+        .connection-status.offline {
+            background: var(--primary-red);
+            color: var(--white);
+            animation: pulse 2s infinite;
+        }
     </style>
 </head>
 <body oncontextmenu="return false;" onkeydown="return disableKeys(event)">
+
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="connection-status online">
+        <i class="bi bi-wifi"></i>
+        <span>Online</span>
+    </div>
 
     <!-- Loader -->
     <div id="loader" class="loader-overlay d-none">
@@ -956,7 +1132,7 @@
         <!-- Dashboard Header -->
         <div class="dashboard-header">
             <div class="container">
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex justify-content-between align-items-center flex-wrap">
                     <div class="d-flex align-items-center gap-3">
                         <div class="user-avatar">
                             <i class="bi bi-person-fill"></i>
@@ -967,7 +1143,7 @@
                         </div>
                     </div>
                     <div class="d-flex align-items-center gap-3">
-                        <div class="text-end me-3">
+                        <div class="text-end d-none d-md-block">
                             <small class="text-gray-500">Status</small>
                             <div class="badge bg-success">Aktif</div>
                         </div>
@@ -981,18 +1157,59 @@
 
         <!-- Dashboard Content -->
         <div class="container py-5">
+            <!-- Quick Stats -->
+            <div class="row g-3 mb-5">
+                <div class="col-md-4">
+                    <div class="stats-card" data-aos="fade-up">
+                        <i class="bi bi-calendar-check display-6 text-primary mb-2"></i>
+                        <div class="stats-number" id="totalAgendas">0</div>
+                        <div class="stats-label">Total Agenda</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stats-card" data-aos="fade-up" data-aos-delay="100">
+                        <i class="bi bi-book display-6 text-success mb-2"></i>
+                        <div class="stats-number" id="completedExams">0</div>
+                        <div class="stats-label">Ujian Selesai</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stats-card" data-aos="fade-up" data-aos-delay="200">
+                        <i class="bi bi-clock-history display-6 text-warning mb-2"></i>
+                        <div class="stats-number" id="pendingExams">0</div>
+                        <div class="stats-label">Belum Dikerjakan</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Section 1: Agenda List -->
             <div id="secAgenda">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
                     <h3 class="fw-bold">Agenda Ujian Tersedia</h3>
-                    <button class="btn btn-outline-secondary" onclick="location.reload()">
-                        <i class="bi bi-arrow-clockwise me-2"></i>Refresh
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-secondary" onclick="Dashboard.refreshAgendas()">
+                            <i class="bi bi-arrow-clockwise me-2"></i>Refresh
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="Dashboard.toggleHistory()">
+                            <i class="bi bi-clock-history me-2"></i>Histori
+                        </button>
+                    </div>
                 </div>
                 <div id="agendaListContainer" class="row g-4"></div>
             </div>
 
-            <!-- Section 2: Token Input -->
+            <!-- Section 2: History -->
+            <div id="secHistory" class="d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3 class="fw-bold">Histori Pengerjaan</h3>
+                    <button class="btn btn-outline-secondary" onclick="Dashboard.toggleHistory()">
+                        <i class="bi bi-arrow-left me-2"></i>Kembali
+                    </button>
+                </div>
+                <div id="historyListContainer"></div>
+            </div>
+
+            <!-- Section 3: Token Input -->
             <div id="secToken" class="d-none">
                 <div class="token-container">
                     <div class="text-center mb-4">
@@ -1014,9 +1231,9 @@
                 </div>
             </div>
 
-            <!-- Section 3: Mapel List -->
+            <!-- Section 4: Mapel List -->
             <div id="secMapel" class="d-none">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
                     <h3 class="fw-bold">Daftar Mata Pelajaran</h3>
                     <button class="btn btn-outline-secondary" onclick="Dashboard.backToAgenda()">
                         <i class="bi bi-arrow-left me-2"></i>Ganti Agenda
@@ -1038,7 +1255,7 @@
                     Dilarang membuka tab lain!
                 </small>
             </div>
-            <div class="d-flex align-items-center gap-4">
+            <div class="d-flex align-items-center gap-4 flex-wrap">
                 <div class="text-end">
                     <small class="text-gray-500">Sisa Waktu</small>
                     <div id="timerDisplay" class="exam-timer">
@@ -1046,7 +1263,7 @@
                         <span>00:00:00</span>
                     </div>
                 </div>
-                <button class="btn btn-outline-danger" onclick="Exam.showReview()">
+                <button class="btn btn-outline-danger d-none d-md-block" onclick="Exam.showReview()">
                     <i class="bi bi-list-check me-2"></i>Review
                 </button>
             </div>
@@ -1106,7 +1323,7 @@
                 <i class="bi bi-chevron-left me-2"></i>Sebelumnya
             </button>
             
-            <div class="d-flex align-items-center gap-4">
+            <div class="d-flex align-items-center gap-4 flex-wrap">
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="checkRagu" onchange="Exam.toggleRagu()">
                     <label class="form-check-label" for="checkRagu">
@@ -1123,6 +1340,11 @@
             </button>
         </div>
     </div>
+
+    <!-- Floating Action Button for Mobile -->
+    <button class="fab d-md-none" id="fabReview" onclick="Exam.showReview()" style="display: none;">
+        <i class="bi bi-list-check"></i>
+    </button>
 
     <!-- Modals -->
     <!-- Rules Modal -->
@@ -1362,7 +1584,9 @@
                 selectedLeftIndex: null,
                 antiCheatInstalled: false,
                 saveDebounce: null,
-                bookmarks: []
+                bookmarks: [],
+                history: [],
+                connectionStatus: true
             },
             ui: {
                 load: (show, text = 'Memuat...', progress = 0) => {
@@ -1383,6 +1607,14 @@
                         document.getElementById(v).classList.add('d-none');
                     });
                     document.getElementById(id).classList.remove('d-none');
+                    
+                    // Show/hide FAB based on view
+                    const fab = document.getElementById('fabReview');
+                    if (id === 'viewUjian') {
+                        fab.style.display = 'flex';
+                    } else {
+                        fab.style.display = 'none';
+                    }
                 }
             },
             data: {
@@ -1391,6 +1623,22 @@
                 remove: (k) => localStorage.removeItem(k)
             }
         };
+
+        // Connection Monitor
+        function checkConnection() {
+            const status = navigator.onLine;
+            const statusEl = document.getElementById('connectionStatus');
+            
+            if (status) {
+                statusEl.className = 'connection-status online';
+                statusEl.innerHTML = '<i class="bi bi-wifi"></i><span>Online</span>';
+            } else {
+                statusEl.className = 'connection-status offline';
+                statusEl.innerHTML = '<i class="bi bi-wifi-off"></i><span>Offline</span>';
+            }
+            
+            App.state.connectionStatus = status;
+        }
 
         // UI Helpers
         const Ui = {
@@ -1570,7 +1818,9 @@
                             selectedLeftIndex: null,
                             antiCheatInstalled: false,
                             saveDebounce: null,
-                            bookmarks: []
+                            bookmarks: [],
+                            history: [],
+                            connectionStatus: true
                         };
 
                         // Clear form
@@ -1590,11 +1840,19 @@
                 document.getElementById('dashNama').innerText = App.state.user.nama_peserta;
                 document.getElementById('dashSekolah').innerText = App.state.user.asal_sekolah;
 
+                // Load history
+                await Dashboard.loadHistory();
+                
                 // Show agenda section
                 document.getElementById('secAgenda').classList.remove('d-none');
+                document.getElementById('secHistory').classList.add('d-none');
                 document.getElementById('secToken').classList.add('d-none');
                 document.getElementById('secMapel').classList.add('d-none');
 
+                await Dashboard.refreshAgendas();
+            },
+
+            refreshAgendas: async () => {
                 const container = document.getElementById('agendaListContainer');
                 container.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-danger" role="status"></div></div>';
 
@@ -1606,6 +1864,10 @@
                         // Clear existing interval
                         if (App.state.dashInterval) clearInterval(App.state.dashInterval);
 
+                        let totalAgendas = res.data.length;
+                        let activeAgendas = 0;
+                        let completedAgendas = 0;
+
                         res.data.forEach((a, index) => {
                             const card = document.createElement('div');
                             card.className = 'col-lg-4 col-md-6';
@@ -1616,7 +1878,7 @@
                                 <div class="agenda-card">
                                     <div class="d-flex justify-content-between align-items-start mb-3">
                                         <h5 class="fw-bold">${a.agenda_ujian}</h5>
-                                        <span class="agenda-status status-upcoming">
+                                        <span class="agenda-status status-upcoming" id="status-${a.id}">
                                             <i class="bi bi-clock me-1"></i>Mulai
                                         </span>
                                     </div>
@@ -1624,11 +1886,11 @@
                                         <i class="bi bi-calendar-event me-1"></i>
                                         ${new Date(a.tgljam_mulai).toLocaleString('id-ID')}
                                     </div>
-                                    <div id="count-${a.id}" class="alert alert-light mb-3 text-center fw-bold">
+                                    <div id="count-${a.id}" class="countdown-timer mb-3 text-center">
                                         <i class="bi bi-hourglass-split me-2"></i>
                                         <span>Memuat...</span>
                                     </div>
-                                    <button id="btn-${a.id}" class="btn btn-primary w-100" disabled>
+                                    <button id="btn-${a.id}" class="btn btn-secondary w-100" disabled>
                                         <i class="bi bi-lock me-2"></i>Menunggu Waktu
                                     </button>
                                 </div>
@@ -1644,14 +1906,17 @@
                                 const end = new Date(a.tgljam_selesai).getTime();
                                 const countEl = document.getElementById(`count-${a.id}`);
                                 const btnEl = document.getElementById(`btn-${a.id}`);
-                                const statusEl = countEl?.parentElement?.querySelector('.agenda-status');
+                                const statusEl = document.getElementById(`status-${a.id}`);
 
                                 if (!countEl || !btnEl) return;
 
+                                const diff = end - start;
+                                const totalHours = Math.floor(diff / (1000 * 60 * 60));
+
                                 if (now < start) {
-                                    const diff = start - now;
-                                    countEl.innerHTML = `<i class="bi bi-hourglass-split me-2"></i>Mulai dalam: ${Dashboard.formatTime(diff)}`;
-                                    countEl.className = 'alert alert-warning mb-3 text-center fw-bold';
+                                    const diffStart = start - now;
+                                    countEl.innerHTML = `<i class="bi bi-hourglass-split me-2"></i>Mulai dalam: ${Dashboard.formatTime(diffStart)}`;
+                                    countEl.className = 'countdown-timer mb-3 text-center';
                                     if (statusEl) {
                                         statusEl.className = 'agenda-status status-upcoming';
                                         statusEl.innerHTML = '<i class="bi bi-clock me-1"></i>Mulai';
@@ -1660,9 +1925,18 @@
                                     btnEl.innerHTML = '<i class="bi bi-lock me-2"></i>Menunggu Waktu';
                                     btnEl.className = 'btn btn-secondary w-100';
                                 } else if (now >= start && now <= end) {
-                                    const diff = end - now;
-                                    countEl.innerHTML = `<i class="bi bi-clock-history me-2"></i>Sisa waktu: ${Dashboard.formatTime(diff)}`;
-                                    countEl.className = 'alert alert-success mb-3 text-center fw-bold';
+                                    const diffEnd = end - now;
+                                    countEl.innerHTML = `<i class="bi bi-clock-history me-2"></i>Sisa waktu: ${Dashboard.formatTime(diffEnd)}`;
+                                    
+                                    // Change color based on remaining time
+                                    if (diffEnd < 3600000) { // Less than 1 hour
+                                        countEl.className = 'countdown-timer mb-3 text-center danger';
+                                    } else if (diffEnd < 7200000) { // Less than 2 hours
+                                        countEl.className = 'countdown-timer mb-3 text-center warning';
+                                    } else {
+                                        countEl.className = 'countdown-timer mb-3 text-center';
+                                    }
+                                    
                                     if (statusEl) {
                                         statusEl.className = 'agenda-status status-active';
                                         statusEl.innerHTML = '<i class="bi bi-play-circle me-1"></i>Aktif';
@@ -1671,9 +1945,10 @@
                                     btnEl.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>BUKA UJIAN';
                                     btnEl.className = 'btn btn-primary w-100';
                                     btnEl.onclick = () => Dashboard.openToken(a.id, a.agenda_ujian);
+                                    activeAgendas++;
                                 } else {
                                     countEl.innerHTML = '<i class="bi bi-x-circle me-2"></i>Ujian Berakhir';
-                                    countEl.className = 'alert alert-danger mb-3 text-center fw-bold';
+                                    countEl.className = 'countdown-timer mb-3 text-center';
                                     if (statusEl) {
                                         statusEl.className = 'agenda-status status-ended';
                                         statusEl.innerHTML = '<i class="bi bi-check-circle me-1"></i>Selesai';
@@ -1681,8 +1956,14 @@
                                     btnEl.disabled = true;
                                     btnEl.innerHTML = '<i class="bi bi-lock me-2"></i>Berakhir';
                                     btnEl.className = 'btn btn-secondary w-100';
+                                    completedAgendas++;
                                 }
                             });
+
+                            // Update stats
+                            document.getElementById('totalAgendas').innerText = totalAgendas;
+                            document.getElementById('completedExams').innerText = completedAgendas;
+                            document.getElementById('pendingExams').innerText = activeAgendas;
                         };
 
                         updateCountdown();
@@ -1695,6 +1976,11 @@
                                 <p class="text-gray-400">Silakan hubungi administrator untuk informasi lebih lanjut</p>
                             </div>
                         `;
+                        
+                        // Update stats
+                        document.getElementById('totalAgendas').innerText = '0';
+                        document.getElementById('completedExams').innerText = '0';
+                        document.getElementById('pendingExams').innerText = '0';
                     }
                 } catch (err) {
                     container.innerHTML = `
@@ -1705,6 +1991,75 @@
                         </div>
                     `;
                 }
+            },
+
+            loadHistory: async () => {
+                try {
+                    // Simulate loading history from API
+                    // In real implementation, you would fetch from /api/history
+                    App.state.history = App.data.get('exam_history') || [];
+                } catch (err) {
+                    console.error('Failed to load history:', err);
+                }
+            },
+
+            toggleHistory: () => {
+                const agendaSection = document.getElementById('secAgenda');
+                const historySection = document.getElementById('secHistory');
+                
+                if (historySection.classList.contains('d-none')) {
+                    agendaSection.classList.add('d-none');
+                    historySection.classList.remove('d-none');
+                    Dashboard.showHistory();
+                } else {
+                    historySection.classList.add('d-none');
+                    agendaSection.classList.remove('d-none');
+                }
+            },
+
+            showHistory: () => {
+                const container = document.getElementById('historyListContainer');
+                
+                if (App.state.history.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-clock-history display-1 text-gray-300"></i>
+                            <h5 class="text-gray-500 mt-3">Belum Ada Histori</h5>
+                            <p class="text-gray-400">Histori pengerjaan ujian akan muncul di sini</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = '';
+                App.state.history.forEach((item, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'history-card';
+                    card.setAttribute('data-aos', 'fade-up');
+                    card.setAttribute('data-aos-delay', index * 50);
+                    
+                    const statusClass = item.status === 'Selesai' ? 'bg-success' : 'bg-warning';
+                    const statusText = item.status === 'Selesai' ? 'Selesai' : 'Proses';
+                    
+                    card.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="fw-bold mb-1">${item.agenda}</h6>
+                                <p class="text-gray-600 mb-2">${item.mapel}</p>
+                                <small class="text-gray-500">
+                                    <i class="bi bi-calendar me-1"></i>${new Date(item.tanggal).toLocaleString('id-ID')}
+                                </small>
+                            </div>
+                            <div class="text-end">
+                                <span class="history-status ${statusClass}">${statusText}</span>
+                                <div class="mt-2">
+                                    <small class="text-gray-500">Skor: ${item.nilai || '-'}</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
             },
 
             formatTime: (ms) => {
@@ -1721,6 +2076,7 @@
             openToken: (id, name) => {
                 App.state.agendaId = id;
                 document.getElementById('secAgenda').classList.add('d-none');
+                document.getElementById('secHistory').classList.add('d-none');
                 document.getElementById('secToken').classList.remove('d-none');
                 document.getElementById('tokenAgendaName').innerText = name;
                 document.getElementById('inputToken').value = '';
@@ -2337,7 +2693,16 @@
                     
                     if (diff < 0) {
                         clearInterval(App.state.timer);
-                        Exam.finish(true);
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Waktu Habis!',
+                            text: 'Ujian akan otomatis disimpan.',
+                            timer: 3000,
+                            timerProgressBar: true,
+                            showConfirmButton: false
+                        }).then(() => {
+                            Exam.finish(true);
+                        });
                         return;
                     }
                     
@@ -2350,6 +2715,10 @@
                     
                     if (diff < 300000) {
                         timerEl.classList.add('warning');
+                    }
+                    if (diff < 60000) {
+                        timerEl.classList.remove('warning');
+                        timerEl.classList.add('danger');
                     }
                 }, 1000);
             },
@@ -2378,6 +2747,16 @@
                                 document.getElementById('violationTimer').innerText = 'Waktu Habis!';
                                 document.getElementById('btnResumeExam').classList.add('d-none');
                                 document.getElementById('btnForceFinish').classList.remove('d-none');
+                                document.getElementById('btnForceFinish').onclick = () => {
+                                    bootstrap.Modal.getInstance(document.getElementById('modalViolation')).hide();
+                                    Exam.finish(true);
+                                };
+                                
+                                // Auto-submit setelah 3 detik
+                                setTimeout(() => {
+                                    bootstrap.Modal.getInstance(document.getElementById('modalViolation')).hide();
+                                    Exam.finish(true);
+                                }, 3000);
                             }
                         }, 1000);
                     }
@@ -2464,11 +2843,30 @@
                         }
                     });
 
-                    App.ui.load(true, 'Menyimpan...', 100);
-
                     // Close violation modal if open
                     const violationModal = bootstrap.Modal.getInstance(document.getElementById('modalViolation'));
                     if (violationModal) violationModal.hide();
+
+                    // Close review modal if open
+                    const reviewModal = bootstrap.Modal.getInstance(document.getElementById('modalReview'));
+                    if (reviewModal) reviewModal.hide();
+
+                    // Add to history
+                    const historyItem = {
+                        agenda: App.state.agendaId,
+                        mapel: App.state.activeMapel.nama_mata_pelajaran,
+                        tanggal: new Date().toISOString(),
+                        status: 'Selesai',
+                        nilai: null // Would be calculated by server
+                    };
+                    
+                    App.state.history.unshift(historyItem);
+                    App.data.save('exam_history', App.state.history);
+
+                    // Clear exam state
+                    Exam.resetExamState();
+
+                    App.ui.load(true, 'Menyimpan...', 100);
 
                     setTimeout(() => {
                         App.ui.load(false);
@@ -2476,10 +2874,15 @@
                         if (r.success) {
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Ujian Selesai',
+                                title: 'Ujian Selesai!',
                                 text: 'Jawaban Anda berhasil disimpan.',
-                                confirmButtonColor: '#10b981'
+                                confirmButtonColor: '#10b981',
+                                timer: 2000,
+                                timerProgressBar: true,
+                                showConfirmButton: false
                             }).then(() => {
+                                // Kembali ke dashboard dan refresh mapel
+                                App.ui.view('viewDashboard');
                                 Dashboard.refreshMapel();
                             });
                         } else {
@@ -2488,6 +2891,10 @@
                                 title: 'Error',
                                 text: r.message,
                                 confirmButtonColor: '#dc2626'
+                            }).then(() => {
+                                // Tetap kembali ke dashboard meskipun error
+                                App.ui.view('viewDashboard');
+                                Dashboard.refreshMapel();
                             });
                         }
                     }, 500);
@@ -2498,8 +2905,33 @@
                         title: 'Error',
                         text: err.message,
                         confirmButtonColor: '#dc2626'
+                    }).then(() => {
+                        // Kembali ke dashboard meskipun ada error
+                        App.ui.view('viewDashboard');
+                        Dashboard.refreshMapel();
                     });
                 }
+            },
+
+            resetExamState: () => {
+                // Clear intervals
+                if (App.state.timer) clearInterval(App.state.timer);
+                if (App.state.cheatInterval) clearInterval(App.state.cheatInterval);
+                if (App.state.saveDebounce) clearTimeout(App.state.saveDebounce);
+                
+                // Reset exam state
+                App.state.soal = [];
+                App.state.jawaban = [];
+                App.state.ragu = [];
+                App.state.bookmarks = [];
+                App.state.activeMapel = null;
+                App.state.currentSoalIdx = 0;
+                App.state.endTime = 0;
+                App.state.selectedLeftIndex = null;
+                App.state.antiCheatInstalled = false;
+                
+                // Remove visibility change listener
+                document.removeEventListener('visibilitychange', Exam.antiCheat);
             }
         };
 
@@ -2534,6 +2966,18 @@
         // Initialize app
         window.addEventListener('DOMContentLoaded', () => {
             Auth.init();
+            
+            // Monitor connection
+            checkConnection();
+            window.addEventListener('online', checkConnection);
+            window.addEventListener('offline', checkConnection);
+            
+            // Auto refresh agendas every 30 seconds
+            setInterval(() => {
+                if (!document.getElementById('viewDashboard').classList.contains('d-none')) {
+                    Dashboard.refreshAgendas();
+                }
+            }, 30000);
         });
 
         // Export modules
