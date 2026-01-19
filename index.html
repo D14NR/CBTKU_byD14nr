@@ -1621,10 +1621,17 @@
             <input type="password" id="l_pass" class="form-control" required placeholder="Password">
             <button type="button" class="btn-password-toggle" onclick="togglePasswordVisibility('l_pass', this)">👁️</button>
           </div>
+          <div style="text-align:center; margin-top:15px;">
+    <button type="button" onclick="showForgotPassword()" style="background:none; border:none; color:var(--primary); font-size:13px; cursor:pointer; text-decoration:underline;">
+      Lupa Password?
+    </button>
+  </div>
         </div>
         
         <button class="btn btn-primary" style="margin-top: 10px;">MASUK UJIAN</button>
       </form>
+
+      
       
       <form id="form-register" class="hidden" onsubmit="event.preventDefault(); handleRegister();">
         <div class="form-group">
@@ -1863,7 +1870,67 @@
       </div>
     </div>
   </div>
-  
+
+  <!-- MODAL FORGOT PASSWORD -->
+<div id="modal-forgot-password" class="modal-backdrop hidden">
+  <div class="modal-content">
+    <div style="font-size:40px; margin-bottom:10px;">🔑</div>
+    <h3>Lupa Password</h3>
+    
+    <div id="forgot-step-1">
+      <p style="font-size:14px; color:var(--text-muted); margin-bottom:20px;">
+        Masukkan username/nomor WA Anda. Kami akan mengirimkan kode OTP untuk verifikasi.
+      </p>
+      <input type="text" id="forgot-username" class="form-control" placeholder="Username / Nomor WA">
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn btn-outline" onclick="closeForgotPassword()">Batal</button>
+        <button class="btn btn-primary" onclick="requestOTP()">Kirim OTP</button>
+      </div>
+    </div>
+    
+    <div id="forgot-step-2" class="hidden">
+      <p style="font-size:14px; color:var(--text-muted); margin-bottom:20px;">
+        Kode OTP telah dikirim ke nomor WA Anda. Masukkan kode OTP 6 digit.
+      </p>
+      <div id="forgot-user-info" style="background:var(--primary-light); padding:10px; border-radius:8px; margin-bottom:15px; font-size:14px;"></div>
+      <input type="text" id="forgot-otp" class="form-control" placeholder="Masukkan 6 digit OTP" maxlength="6" style="text-align:center; font-size:20px; letter-spacing:5px;">
+      <div id="otp-timer" style="font-size:12px; color:var(--warning); margin-top:5px; text-align:center;"></div>
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn btn-outline" onclick="backToStep1()">Kembali</button>
+        <button class="btn btn-primary" onclick="verifyOTP()">Verifikasi OTP</button>
+      </div>
+    </div>
+    
+    <div id="forgot-step-3" class="hidden">
+      <p style="font-size:14px; color:var(--text-muted); margin-bottom:20px;">
+        Masukkan password baru Anda.
+      </p>
+      <div class="password-container" style="margin-bottom:15px;">
+        <input type="password" id="new-password" class="form-control" placeholder="Password baru (minimal 6 karakter)">
+        <button type="button" class="btn-password-toggle" onclick="togglePasswordVisibility('new-password', this)">👁️</button>
+      </div>
+      <div class="password-container">
+        <input type="password" id="confirm-password" class="form-control" placeholder="Konfirmasi password baru">
+        <button type="button" class="btn-password-toggle" onclick="togglePasswordVisibility('confirm-password', this)">👁️</button>
+      </div>
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn btn-outline" onclick="backToStep2()">Kembali</button>
+        <button class="btn btn-primary" onclick="resetPassword()">Reset Password</button>
+      </div>
+    </div>
+    
+    <div id="forgot-step-success" class="hidden">
+      <div style="font-size:60px; margin-bottom:15px; color:var(--success);">✅</div>
+      <h3 style="color:var(--success);">Password Berhasil Direset!</h3>
+      <p style="font-size:14px; color:var(--text-muted); margin-bottom:20px;">
+        Password Anda telah berhasil direset. Silakan login dengan password baru.
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="goToLoginAfterReset()">Login Sekarang</button>
+      </div>
+    </div>
+  </div>
+</div>
 
   <!-- MODAL ZOOM GAMBAR (Dynamic akan ditambahkan oleh JavaScript) -->
   
@@ -2628,6 +2695,253 @@ function showKartu(userData, agendaName, token, jenisTes) {
     modalKartu.classList.remove('hidden');
   }
 }
+
+/* FORGOT PASSWORD FUNCTIONS */
+let forgotUserId = null;
+let resetToken = null;
+let otpTimer = null;
+
+function showForgotPassword() {
+  const modal = document.getElementById('modal-forgot-password');
+  if (modal) {
+    modal.classList.remove('hidden');
+    resetForgotPasswordForm();
+  }
+}
+
+function closeForgotPassword() {
+  const modal = document.getElementById('modal-forgot-password');
+  if (modal) {
+    modal.classList.add('hidden');
+    resetForgotPasswordForm();
+  }
+}
+
+function resetForgotPasswordForm() {
+  // Reset semua field
+  document.getElementById('forgot-username').value = '';
+  document.getElementById('forgot-otp').value = '';
+  document.getElementById('new-password').value = '';
+  document.getElementById('confirm-password').value = '';
+  
+  // Reset state
+  forgotUserId = null;
+  resetToken = null;
+  
+  // Clear timer
+  if (otpTimer) {
+    clearInterval(otpTimer);
+    otpTimer = null;
+  }
+  
+  // Reset tampilan
+  document.getElementById('forgot-step-1').classList.remove('hidden');
+  document.getElementById('forgot-step-2').classList.add('hidden');
+  document.getElementById('forgot-step-3').classList.add('hidden');
+  document.getElementById('forgot-step-success').classList.add('hidden');
+}
+
+function backToStep1() {
+  document.getElementById('forgot-step-1').classList.remove('hidden');
+  document.getElementById('forgot-step-2').classList.add('hidden');
+}
+
+function backToStep2() {
+  document.getElementById('forgot-step-2').classList.remove('hidden');
+  document.getElementById('forgot-step-3').classList.add('hidden');
+}
+
+async function requestOTP() {
+  const username = document.getElementById('forgot-username').value.trim();
+  
+  if (!username) {
+    showToast('Masukkan username/nomor WA', 'error');
+    return;
+  }
+  
+  try {
+    showLoader(true, 'Mengirim OTP...');
+    const result = await apiRequest('/forgot-password', 'POST', { username });
+    showLoader(false);
+    
+    if (result.success) {
+      forgotUserId = result.user_id;
+      
+      // Tampilkan info user
+      const userInfo = document.getElementById('forgot-user-info');
+      if (userInfo) {
+        userInfo.innerHTML = `<strong>${result.nama}</strong> (${username})`;
+      }
+      
+      // Pindah ke step 2
+      document.getElementById('forgot-step-1').classList.add('hidden');
+      document.getElementById('forgot-step-2').classList.remove('hidden');
+      
+      // Focus ke input OTP
+      document.getElementById('forgot-otp').focus();
+      
+      // Start timer
+      startOTPTimer(10); // 10 menit
+      
+      // Jika development, tampilkan OTP di console
+      if (result.otp) {
+        console.log(`OTP untuk testing: ${result.otp}`);
+        showToast(`OTP: ${result.otp} (hanya untuk testing)`, 'info');
+      }
+      
+      showToast(result.message, 'success');
+    } else {
+      showToast(result.message, 'error');
+    }
+  } catch (error) {
+    showLoader(false);
+    showToast('Gagal mengirim OTP', 'error');
+    console.error('Request OTP error:', error);
+  }
+}
+
+function startOTPTimer(minutes) {
+  let timeLeft = minutes * 60;
+  const timerElement = document.getElementById('otp-timer');
+  
+  if (otpTimer) clearInterval(otpTimer);
+  
+  otpTimer = setInterval(() => {
+    const minutesLeft = Math.floor(timeLeft / 60);
+    const secondsLeft = timeLeft % 60;
+    
+    if (timerElement) {
+      timerElement.innerHTML = `Kode berlaku: ${minutesLeft}:${secondsLeft.toString().padStart(2, '0')}`;
+      
+      if (timeLeft <= 60) {
+        timerElement.style.color = 'var(--danger)';
+      } else if (timeLeft <= 180) {
+        timerElement.style.color = 'var(--warning)';
+      }
+    }
+    
+    if (timeLeft <= 0) {
+      clearInterval(otpTimer);
+      if (timerElement) {
+        timerElement.innerHTML = 'Kode OTP sudah kadaluarsa';
+        timerElement.style.color = 'var(--danger)';
+      }
+    }
+    
+    timeLeft--;
+  }, 1000);
+}
+
+async function verifyOTP() {
+  const otp = document.getElementById('forgot-otp').value.trim();
+  
+  if (!otp || otp.length !== 6) {
+    showToast('Masukkan 6 digit OTP', 'error');
+    return;
+  }
+  
+  if (!forgotUserId) {
+    showToast('Sesi tidak valid', 'error');
+    return;
+  }
+  
+  try {
+    showLoader(true, 'Memverifikasi OTP...');
+    const result = await apiRequest('/verify-otp', 'POST', { 
+      user_id: forgotUserId, 
+      otp: otp 
+    });
+    showLoader(false);
+    
+    if (result.success) {
+      resetToken = result.reset_token;
+      
+      // Pindah ke step 3
+      document.getElementById('forgot-step-2').classList.add('hidden');
+      document.getElementById('forgot-step-3').classList.remove('hidden');
+      
+      // Focus ke input password
+      document.getElementById('new-password').focus();
+      
+      // Clear timer
+      if (otpTimer) {
+        clearInterval(otpTimer);
+        otpTimer = null;
+      }
+      
+      showToast('OTP berhasil diverifikasi', 'success');
+    } else {
+      showToast(result.message, 'error');
+    }
+  } catch (error) {
+    showLoader(false);
+    showToast('Gagal verifikasi OTP', 'error');
+    console.error('Verify OTP error:', error);
+  }
+}
+
+async function resetPassword() {
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-password').value;
+  
+  if (!newPassword || !confirmPassword) {
+    showToast('Masukkan password baru', 'error');
+    return;
+  }
+  
+  if (newPassword.length < 6) {
+    showToast('Password minimal 6 karakter', 'error');
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    showToast('Password tidak cocok', 'error');
+    return;
+  }
+  
+  if (!resetToken) {
+    showToast('Token tidak valid', 'error');
+    return;
+  }
+  
+  try {
+    showLoader(true, 'Mereset password...');
+    const result = await apiRequest('/reset-password', 'POST', { 
+      reset_token: resetToken,
+      new_password: newPassword,
+      confirm_password: confirmPassword
+    });
+    showLoader(false);
+    
+    if (result.success) {
+      // Pindah ke success step
+      document.getElementById('forgot-step-3').classList.add('hidden');
+      document.getElementById('forgot-step-success').classList.remove('hidden');
+      
+      showToast(result.message, 'success');
+    } else {
+      showToast(result.message, 'error');
+    }
+  } catch (error) {
+    showLoader(false);
+    showToast('Gagal reset password', 'error');
+    console.error('Reset password error:', error);
+  }
+}
+
+function goToLoginAfterReset() {
+  closeForgotPassword();
+  toggleAuth('login');
+  
+  // Clear login form
+  const usernameInput = document.getElementById('l_user');
+  const passwordInput = document.getElementById('l_pass');
+  if (usernameInput) usernameInput.value = '';
+  if (passwordInput) passwordInput.value = '';
+  
+  showToast('Password berhasil direset. Silakan login.', 'success');
+}
+    
 function downloadKartu() { 
   const kartuVisual = document.querySelector('.kartu-visual');
   if (!kartuVisual) return;
