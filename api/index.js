@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 // Load env dari .env saat lokal. Di Vercel, env diambil dari Environment Variables.
 dotenv.config();
@@ -134,7 +135,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
-    // Hash password sebelum simpan - TAMBAHKAN INI
+    // Hash password sebelum simpan
     const passwordHash = await bcrypt.hash(String(form.password), 10);
 
     const payload = {
@@ -172,10 +173,12 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 });
+
 /**
  * POST /api/login
  * body: { u, p }
- */router.post('/login', async (req, res) => {
+ */
+router.post('/login', async (req, res) => {
   const { u, p } = req.body || {};
   try {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
@@ -202,6 +205,247 @@ router.post('/register', async (req, res) => {
     if (!ok) return res.status(401).json({ success: false, message: 'Password salah' });
 
     res.json({ success: true, data: safeUser(user) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/forgot-password
+ * Minta reset password (kirim kode OTP)
+ */
+router.post('/forgot-password', async (req, res) => {
+  const { username } = req.body || {};
+  try {
+    if (!username) return res.status(400).json({ success: false, message: 'Username/Nomor WA wajib diisi' });
+
+    // Cari user berdasarkan username/no WA
+    const userList = await supabaseRequest('peserta', 'GET', {
+      select: 'id,nama_peserta,nis_username,no_wa_peserta',
+      or: `(nis_username.eq.${username},no_wa_peserta.eq.${username})`,
+      limit: 1
+    });
+
+    if (!userList || userList.length === 0) {
+      return res.status(404).json({ success: false, message: 'Akun tidak ditemukan' });
+    }
+
+    const user = userList[0];
+    
+    // Generate OTP 6 digit
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60000); // 10 menit dari sekarang
+    
+    // Simpan OTP ke database
+    await supabaseRequest(
+      'password_reset',
+      'POST',
+      null,
+      {
+        user_id: user.id,
+        username: user.nis_username,
+        otp_code: otp,
+        expires_at: otpExpiry.toISOString(),
+        status: 'pending',
+        created_at: new Date().toISOString()
+      }
+    );
+
+    // NOTE: Dalam implementasi nyata, OTP dikirim via SMS/WhatsApp/Email
+    // Di sini kita hanya return di response untuk testing
+    console.log(`OTP untuk ${user.nis_username}: ${otp} (valid 10 menit)`);
+
+    res.json({ 
+      success: true, 
+      message: 'Kode OTP telah dikirim',
+      // Hanya untuk development/testing, hapus di production
+      otp: process.env.NODE_ENV === 'development' ? otp : undefined,
+      user_id: user.id,
+      nama: user.nama_peserta
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/verify-otp
+ * Verifikasi OTP
+ */
+router.post('/verify-otp', async (req, res) => {
+  const { user_id, otp } = req.body || {};
+  try {
+    if (!user_id || !otp) return res.status(400).json({ success: false, message: 'User ID dan OTP wajib diisi' });
+
+    // Cari OTP yang valid
+    const otpList = await supabaseRequest('password_reset', 'GET', {
+      select: 'id,otp_code,expires_at,status',
+      user_id: `eq.${user_id}`,
+      otp_code: `eq.${otp}`,
+      status: `eq.pending`,
+      order: 'created_at.desc',
+      limit: 1
+    });
+
+    if (!otpList || otpList.length === 0) {
+      return res.status(400).json({ success: false, message: 'Kode OTP tidak valid' });
+    }
+
+    const otpData = otpList[0];
+    const now = new Date();
+    const expiryDate = new Date(otpData.expires_at);
+
+    if (now > expiryDate) {
+      await supabaseRequest(
+        'password_reset',
+        'PATCH',
+        { id: `eq.${otpData.id}` },
+        { status: 'expired' }
+      );
+      return res.status(400).json({ success: false, message: 'Kode OTP sudah kadaluarsa' });
+    }
+
+    // Update status OTP menjadi verified
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      { id: `eq.${otpData.id}` },
+      { status: 'verified', verified_at: new Date().toISOString() }
+    );
+
+    // Generate reset token untuk reset password
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 30 * 60000); // 30 menit
+
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      { id: `eq.${otpData.id}` },
+      { 
+        reset_token: resetToken,
+        token_expires_at: tokenExpiry.toISOString()
+      }
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'OTP berhasil diverifikasi',
+      reset_token: resetToken,
+      token_expires_at: tokenExpiry.toISOString()
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/reset-password
+ * Reset password dengan token
+ */
+router.post('/reset-password', async (req, res) => {
+  const { reset_token, new_password, confirm_password } = req.body || {};
+  try {
+    if (!reset_token || !new_password || !confirm_password) {
+      return res.status(400).json({ success: false, message: 'Token dan password baru wajib diisi' });
+    }
+
+    if (new_password !== confirm_password) {
+      return res.status(400).json({ success: false, message: 'Password baru tidak cocok' });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter' });
+    }
+
+    // Cari reset token yang valid
+    const resetList = await supabaseRequest('password_reset', 'GET', {
+      select: 'id,user_id,reset_token,token_expires_at,status',
+      reset_token: `eq.${reset_token}`,
+      status: `eq.verified`,
+      limit: 1
+    });
+
+    if (!resetList || resetList.length === 0) {
+      return res.status(400).json({ success: false, message: 'Token reset tidak valid' });
+    }
+
+    const resetData = resetList[0];
+    const now = new Date();
+    const tokenExpiry = new Date(resetData.token_expires_at);
+
+    if (now > tokenExpiry) {
+      await supabaseRequest(
+        'password_reset',
+        'PATCH',
+        { id: `eq.${resetData.id}` },
+        { status: 'expired' }
+      );
+      return res.status(400).json({ success: false, message: 'Token reset sudah kadaluarsa' });
+    }
+
+    // Hash password baru
+    const passwordHash = await bcrypt.hash(String(new_password), 10);
+
+    // Update password user
+    await supabaseRequest(
+      'peserta',
+      'PATCH',
+      { id: `eq.${resetData.user_id}` },
+      { password: passwordHash }
+    );
+
+    // Update status reset menjadi completed
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      { id: `eq.${resetData.id}` },
+      { 
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      }
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Password berhasil direset. Silakan login dengan password baru.' 
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Endpoint untuk membersihkan data reset password yang expired
+router.post('/cleanup-expired-resets', async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    
+    // Update status yang expired
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      {
+        status: 'eq.pending',
+        expires_at: `lt.${now}`
+      },
+      { status: 'expired' }
+    );
+    
+    // Hapus data yang sudah completed lebih dari 7 hari
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    await supabaseRequest(
+      'password_reset',
+      'DELETE',
+      {
+        status: 'eq.completed',
+        completed_at: `lt.${sevenDaysAgo}`
+      }
+    );
+    
+    res.json({ success: true, message: 'Cleanup berhasil' });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
