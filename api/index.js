@@ -134,13 +134,13 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
-    // Hash password sebelum simpan
+    // Hash password sebelum simpan - TAMBAHKAN INI
     const passwordHash = await bcrypt.hash(String(form.password), 10);
 
     const payload = {
       nama_peserta: String(form.nama).toUpperCase(),
       nis_username: username,
-      password: passwordHash, // simpan hash
+      password: passwordHash, // SIMPAN HASH, BUKAN PLAIN TEXT
       jenjang_studi: String(form.jenjang),
       kelas: String(form.kelas),
       asal_sekolah: String(form.sekolah),
@@ -162,26 +162,27 @@ router.post('/register', async (req, res) => {
       if (ag && ag.length > 0) namaAgenda = ag[0].agenda_ujian;
     }
 
-    res.json({ success: true, data: safeUser(resData?.[0]), nama_agenda: namaAgenda });
+    res.json({ 
+      success: true, 
+      data: safeUser(resData?.[0]), 
+      nama_agenda: namaAgenda 
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
-
 /**
  * POST /api/login
  * body: { u, p }
- */
-router.post('/login', async (req, res) => {
+ */router.post('/login', async (req, res) => {
   const { u, p } = req.body || {};
   try {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
 
     const userList = await supabaseRequest('peserta', 'GET', {
       // ambil kolom yang perlu + password hash untuk compare
-      select:
-        'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
+      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
       or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
       limit: 1
     });
@@ -196,6 +197,7 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Akun Nonaktif/Blokir' });
     }
 
+    // Gunakan bcrypt.compare untuk membandingkan password dengan hash
     const ok = await bcrypt.compare(String(p), String(user.password || ''));
     if (!ok) return res.status(401).json({ success: false, message: 'Password salah' });
 
