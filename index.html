@@ -3105,18 +3105,9 @@ function renderQuestion(idx) {
     } 
     
     html += `</table>`;
-  } else if (question.type_soal.includes('Pejodohan')) {
-  console.log('DEBUG - Tipe soal penjodohan terdeteksi');
-  console.log('DEBUG - Struktur question:', question);
-  console.log('DEBUG - Field pernyataan_kiri_1:', question['pernyataan_kiri_1']);
-  console.log('DEBUG - Field pernyataan_kanan_1:', question['pernyataan_kanan_1']);
-  
-  // Tampilkan semua field yang dimulai dengan 'pernyataan'
-  Object.keys(question).forEach(key => {
-    if (key.includes('pernyataan')) {
-      console.log('DEBUG - Field', key, ':', question[key]);
-    }
-  });
+  } else if (question.type_soal.includes('Penjodohan')) {
+  console.log('DEBUG - Tipe soal penjodohan terdeteksi:', question.type_soal);
+  console.log('DEBUG - Struktur question untuk penjodohan:', question);
   
   matchPairs = {}; 
   if (answer && answer !== '-') {
@@ -3135,36 +3126,18 @@ function renderQuestion(idx) {
         <div class="match-col left">
   `;
   
-  // KIRI - coba semua kemungkinan field
+  // KIRI - menggunakan pernyataan_kiri_1 sampai pernyataan_kiri_8
   let leftItemsFound = false;
-  for (let i = 1; i <= 10; i++) { 
-    // Coba beberapa kemungkinan format field
-    const possibleKeys = [
-      `pernyataan_kiri_${i}`,
-      `Pernyataan_kiri_${i}`,
-      `pernyataan_kiri${i}`,
-      `Pernyataan_kiri${i}`,
-      `pernyataan_left_${i}`,
-      `Pernyataan_left_${i}`
-    ];
-    
-    let foundKey = null;
-    let foundValue = null;
-    
-    for (const key of possibleKeys) {
-      if (question[key]) {
-        foundKey = key;
-        foundValue = question[key];
-        break;
-      }
-    }
-    
-    if (foundValue) {
+  let leftItemCount = 0;
+  for (let i = 1; i <= 8; i++) { 
+    const leftValue = question['pernyataan_kiri_' + i];
+    if (leftValue && leftValue.trim() !== '') {
       leftItemsFound = true;
-      console.log(`DEBUG - Found left item ${i}: ${foundKey} = ${foundValue}`);
+      leftItemCount++;
+      console.log(`DEBUG - Left item ${i}: pernyataan_kiri_${i} = ${leftValue}`);
       html += `
         <div class="match-item" id="left-${i}" onclick="handleMatch('left','${i}')">
-          ${foundValue}
+          ${leftValue}
           <div class="match-point"></div>
         </div>
       `;
@@ -3172,7 +3145,7 @@ function renderQuestion(idx) {
   }
   
   if (!leftItemsFound) {
-    html += `<div style="color: #ef4444; padding: 10px; text-align: center;">Data pernyataan kiri tidak ditemukan</div>`;
+    html += `<div style="color: #ef4444; padding: 10px; text-align: center;">Tidak ada data pernyataan kiri</div>`;
   }
   
   html += `
@@ -3180,46 +3153,31 @@ function renderQuestion(idx) {
         <div class="match-col right">
   `;
   
-  // KANAN - coba semua kemungkinan field
+  // KANAN - menggunakan pernyataan_kanan_1 sampai pernyataan_kanan_8
   let rightItemsFound = false;
-  for (let i = 1; i <= 10; i++) { 
-    // Coba beberapa kemungkinan format field
-    const possibleKeys = [
-      `pernyataan_kanan_${i}`,
-      `Pernyataan_kanan_${i}`,
-      `pernyataan_kanan${i}`,
-      `Pernyataan_kanan${i}`,
-      `pernyataan_right_${i}`,
-      `Pernyataan_right_${i}`
-    ];
-    
-    let foundKey = null;
-    let foundValue = null;
-    
-    for (const key of possibleKeys) {
-      if (question[key]) {
-        foundKey = key;
-        foundValue = question[key];
-        break;
-      }
-    }
-    
-    if (foundValue) {
+  let rightItemCount = 0;
+  
+  for (let i = 1; i <= 8; i++) { 
+    const rightValue = question['pernyataan_kanan_' + i];
+    if (rightValue && rightValue.trim() !== '') {
       rightItemsFound = true;
-      console.log(`DEBUG - Found right item ${i}: ${foundKey} = ${foundValue}`);
+      rightItemCount++;
       const rightId = String.fromCharCode(64 + i); // A, B, C, ...
+      console.log(`DEBUG - Right item ${rightId}: pernyataan_kanan_${i} = ${rightValue}`);
       html += `
         <div class="match-item" id="right-${rightId}" onclick="handleMatch('right','${rightId}')">
           <div class="match-point"></div>
-          ${foundValue}
+          ${rightValue}
         </div>
       `;
     }
   }
   
   if (!rightItemsFound) {
-    html += `<div style="color: #ef4444; padding: 10px; text-align: center;">Data pernyataan kanan tidak ditemukan</div>`;
+    html += `<div style="color: #ef4444; padding: 10px; text-align: center;">Tidak ada data pernyataan kanan</div>`;
   }
+  
+  console.log(`DEBUG - Jumlah item kiri: ${leftItemCount}, Jumlah item kanan: ${rightItemCount}`);
   
   html += `
         </div>
