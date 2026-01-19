@@ -264,6 +264,40 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
+// Endpoint untuk membersihkan data reset password yang expired
+router.post('/cleanup-expired-resets', async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    
+    // Update status yang expired
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      {
+        status: 'eq.pending',
+        expires_at: `lt.${now}`
+      },
+      { status: 'expired' }
+    );
+    
+    // Hapus data yang sudah completed lebih dari 7 hari
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    await supabaseRequest(
+      'password_reset',
+      'DELETE',
+      {
+        status: 'eq.completed',
+        completed_at: `lt.${sevenDaysAgo}`
+      }
+    );
+    
+    res.json({ success: true, message: 'Cleanup berhasil' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 /**
  * POST /api/verify-otp
  * Verifikasi OTP
