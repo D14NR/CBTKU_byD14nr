@@ -2614,7 +2614,7 @@ function showKartu(userData, agendaName, token, jenisTes) {
   if (k_nama) k_nama.innerText = userData.nama_peserta;
   if (k_sekolah) k_sekolah.innerText = userData.asal_sekolah;
   if (k_user) k_user.innerText = userData.nis_username;
-  if (k_pass) k_pass.innerText = '******'; // Password tidak ditampilkan untuk keamanan
+  if (k_pass) k_pass.innerText = '********'; // JANGAN tampilkan password/hash
   if (k_token) k_token.innerText = token;
   if (k_jenis) k_jenis.innerText = jenisTes || "Ujian Umum";
   
@@ -2628,7 +2628,6 @@ function showKartu(userData, agendaName, token, jenisTes) {
     modalKartu.classList.remove('hidden');
   }
 }
-
 function downloadKartu() { 
   const kartuVisual = document.querySelector('.kartu-visual');
   if (!kartuVisual) return;
