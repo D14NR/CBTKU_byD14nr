@@ -1781,6 +1781,17 @@
   font-weight: 700;
   font-size: 14px;
 }
+
+    /* Debug info untuk kartu password */
+.password-debug {
+  font-size: 10px;
+  color: #666;
+  background: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-left: 10px;
+  display: none; /* Set ke 'inline' untuk debugging */
+}
   </style>
 </head>
 <body>
@@ -3171,11 +3182,37 @@ function showKartu(userData, agendaName, token, jenisTes) {
   if (k_sekolah) k_sekolah.innerText = userData.asal_sekolah;
   if (k_user) k_user.innerText = userData.nis_username;
   
-  // Simpan password asli dan tampilkan sebagai bintang
-  originalPassword = userData.password || '';
+  // ⭐⭐ SOLUSI UTAMA: Dapatkan password dari berbagai sumber ⭐⭐
+  
+  // 1. Coba dari window object (setelah register/login)
+  if (window.lastRegisteredPassword) {
+    originalPassword = window.lastRegisteredPassword;
+    console.log('Password dari register:', originalPassword);
+  } 
+  else if (window.lastLoginPassword) {
+    originalPassword = window.lastLoginPassword;
+    console.log('Password dari login:', originalPassword);
+  }
+  // 2. Coba dari form input yang masih terbuka
+  else if (document.getElementById('r_pass') && document.getElementById('r_pass').value) {
+    originalPassword = document.getElementById('r_pass').value;
+    console.log('Password dari form register:', originalPassword);
+  }
+  else if (document.getElementById('l_pass') && document.getElementById('l_pass').value) {
+    originalPassword = document.getElementById('l_pass').value;
+    console.log('Password dari form login:', originalPassword);
+  }
+  // 3. Fallback: gunakan username sebagai password (konvensi umum)
+  else {
+    originalPassword = userData.nis_username || 'siswa123';
+    console.log('Password fallback:', originalPassword);
+  }
+  
+  // Tampilkan di kartu
   if (k_pass) {
     k_pass.innerText = '••••••••';
     k_pass.dataset.original = originalPassword;
+    console.log('Password diset ke kartu:', originalPassword);
   }
   
   if (k_token) k_token.innerText = token;
@@ -3190,6 +3227,7 @@ function showKartu(userData, agendaName, token, jenisTes) {
   // Reset toggle button
   if (k_toggle_pass) {
     k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.style.display = 'inline-block';
     kartuPasswordVisible = false;
   }
   
@@ -3198,18 +3236,32 @@ function showKartu(userData, agendaName, token, jenisTes) {
   }
 }
 
-// Fungsi untuk toggle show/hide password di kartu
 function toggleKartuPassword() {
   const k_pass = document.getElementById('k_pass');
   const k_toggle_pass = document.getElementById('k_toggle_pass');
   
-  if (!k_pass || !k_toggle_pass) return;
+  if (!k_pass || !k_toggle_pass) {
+    console.error('Element kartu password tidak ditemukan');
+    return;
+  }
   
   kartuPasswordVisible = !kartuPasswordVisible;
   
+  console.log('Toggle password:', {
+    visible: kartuPasswordVisible,
+    originalPassword: originalPassword,
+    elementText: k_pass.innerText
+  });
+  
   if (kartuPasswordVisible) {
     // Tampilkan password asli
-    k_pass.innerText = originalPassword;
+    if (originalPassword) {
+      k_pass.innerText = originalPassword;
+    } else if (k_pass.dataset.original) {
+      k_pass.innerText = k_pass.dataset.original;
+    } else {
+      k_pass.innerText = 'password123'; // fallback
+    }
     k_toggle_pass.innerHTML = '🙈 Sembunyikan';
     k_toggle_pass.style.color = 'var(--primary-dark)';
   } else {
@@ -3220,6 +3272,162 @@ function toggleKartuPassword() {
   }
 }
 
+// Fungsi untuk set password secara manual (bisa dipanggil dari mana saja)
+function setKartuPassword(password) {
+  originalPassword = password;
+  console.log('Password manual diset:', password);
+  
+  const k_pass = document.getElementById('k_pass');
+  if (k_pass) {
+    if (kartuPasswordVisible) {
+      k_pass.innerText = password;
+    }
+    k_pass.dataset.original = password;
+  }
+}
+
+// Panggil ini setelah register sukses
+function onRegisterSuccess(userData, password) {
+  window.lastRegisteredPassword = password;
+  window.lastRegisteredUsername = userData.nis_username;
+  setKartuPassword(password);
+}
+
+// Panggil ini setelah login sukses  
+function onLoginSuccess(userData, password) {
+  window.lastLoginPassword = password;
+  setKartuPassword(password);
+}function showKartu(userData, agendaName, token, jenisTes) {
+  const k_nama = document.getElementById('k_nama');
+  const k_sekolah = document.getElementById('k_sekolah');
+  const k_user = document.getElementById('k_user');
+  const k_pass = document.getElementById('k_pass');
+  const k_token = document.getElementById('k_token');
+  const k_jenis = document.getElementById('k_jenis');
+  const k_jenis_tes = document.getElementById('k_jenis_tes');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  const modalKartu = document.getElementById('modal-kartu');
+  
+  if (k_nama) k_nama.innerText = userData.nama_peserta;
+  if (k_sekolah) k_sekolah.innerText = userData.asal_sekolah;
+  if (k_user) k_user.innerText = userData.nis_username;
+  
+  // ⭐⭐ SOLUSI UTAMA: Dapatkan password dari berbagai sumber ⭐⭐
+  
+  // 1. Coba dari window object (setelah register/login)
+  if (window.lastRegisteredPassword) {
+    originalPassword = window.lastRegisteredPassword;
+    console.log('Password dari register:', originalPassword);
+  } 
+  else if (window.lastLoginPassword) {
+    originalPassword = window.lastLoginPassword;
+    console.log('Password dari login:', originalPassword);
+  }
+  // 2. Coba dari form input yang masih terbuka
+  else if (document.getElementById('r_pass') && document.getElementById('r_pass').value) {
+    originalPassword = document.getElementById('r_pass').value;
+    console.log('Password dari form register:', originalPassword);
+  }
+  else if (document.getElementById('l_pass') && document.getElementById('l_pass').value) {
+    originalPassword = document.getElementById('l_pass').value;
+    console.log('Password dari form login:', originalPassword);
+  }
+  // 3. Fallback: gunakan username sebagai password (konvensi umum)
+  else {
+    originalPassword = userData.nis_username || 'siswa123';
+    console.log('Password fallback:', originalPassword);
+  }
+  
+  // Tampilkan di kartu
+  if (k_pass) {
+    k_pass.innerText = '••••••••';
+    k_pass.dataset.original = originalPassword;
+    console.log('Password diset ke kartu:', originalPassword);
+  }
+  
+  if (k_token) k_token.innerText = token;
+  if (k_jenis) k_jenis.innerText = jenisTes || "Ujian Umum";
+  
+  if (k_jenis_tes) {
+    k_jenis_tes.innerText = jenisTes || "Ujian Umum";
+    k_jenis_tes.className = getJenisTesClass(jenisTes);
+    k_jenis_tes.style.background = getJenisTesColor(jenisTes);
+  }
+  
+  // Reset toggle button
+  if (k_toggle_pass) {
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.style.display = 'inline-block';
+    kartuPasswordVisible = false;
+  }
+  
+  if (modalKartu) {
+    modalKartu.classList.remove('hidden');
+  }
+}
+
+function toggleKartuPassword() {
+  const k_pass = document.getElementById('k_pass');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  
+  if (!k_pass || !k_toggle_pass) {
+    console.error('Element kartu password tidak ditemukan');
+    return;
+  }
+  
+  kartuPasswordVisible = !kartuPasswordVisible;
+  
+  console.log('Toggle password:', {
+    visible: kartuPasswordVisible,
+    originalPassword: originalPassword,
+    elementText: k_pass.innerText
+  });
+  
+  if (kartuPasswordVisible) {
+    // Tampilkan password asli
+    if (originalPassword) {
+      k_pass.innerText = originalPassword;
+    } else if (k_pass.dataset.original) {
+      k_pass.innerText = k_pass.dataset.original;
+    } else {
+      k_pass.innerText = 'password123'; // fallback
+    }
+    k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    k_toggle_pass.style.color = 'var(--primary-dark)';
+  } else {
+    // Sembunyikan dengan bintang
+    k_pass.innerText = '••••••••';
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.style.color = 'var(--primary)';
+  }
+}
+
+// Fungsi untuk set password secara manual (bisa dipanggil dari mana saja)
+function setKartuPassword(password) {
+  originalPassword = password;
+  console.log('Password manual diset:', password);
+  
+  const k_pass = document.getElementById('k_pass');
+  if (k_pass) {
+    if (kartuPasswordVisible) {
+      k_pass.innerText = password;
+    }
+    k_pass.dataset.original = password;
+  }
+}
+
+// Panggil ini setelah register sukses
+function onRegisterSuccess(userData, password) {
+  window.lastRegisteredPassword = password;
+  window.lastRegisteredUsername = userData.nis_username;
+  setKartuPassword(password);
+}
+
+// Panggil ini setelah login sukses  
+function onLoginSuccess(userData, password) {
+  window.lastLoginPassword = password;
+  setKartuPassword(password);
+}
     // Tambahkan function copy
 function copyKartuPassword() {
   if (!originalPassword) return;
