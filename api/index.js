@@ -3,7 +3,6 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 // Load env dari .env saat lokal. Di Vercel, env diambil dari Environment Variables.
@@ -64,7 +63,7 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
 function safeUser(u) {
   if (!u) return u;
   const copy = { ...u };
-  delete copy.password; // jangan pernah kirim password/hash ke client
+  delete copy.password; // jangan pernah kirim password ke client
   return copy;
 }
 
@@ -99,7 +98,7 @@ router.get('/agenda', async (req, res) => {
 });
 
 /**
- * POST /api/register
+ * POST /api/register  (PLAINTEXT PASSWORD)
  */
 router.post('/register', async (req, res) => {
   const form = req.body || {};
@@ -135,13 +134,11 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
-    // Hash password sebelum simpan
-    const passwordHash = await bcrypt.hash(String(form.password), 10);
-
+    // TANPA HASH: simpan password apa adanya (plaintext)
     const payload = {
       nama_peserta: String(form.nama).toUpperCase(),
       nis_username: username,
-      password: passwordHash, // SIMPAN HASH, BUKAN PLAIN TEXT
+      password: String(form.password), // PLAINTEXT
       jenjang_studi: String(form.jenjang),
       kelas: String(form.kelas),
       asal_sekolah: String(form.sekolah),
@@ -163,11 +160,7 @@ router.post('/register', async (req, res) => {
       if (ag && ag.length > 0) namaAgenda = ag[0].agenda_ujian;
     }
 
-    res.json({ 
-      success: true, 
-      data: safeUser(resData?.[0]), 
-      nama_agenda: namaAgenda 
-    });
+    res.json({ success: true, data: safeUser(resData?.[0]), nama_agenda: namaAgenda });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
@@ -175,7 +168,7 @@ router.post('/register', async (req, res) => {
 });
 
 /**
- * POST /api/login
+ * POST /api/login  (PLAINTEXT PASSWORD)
  * body: { u, p }
  */
 router.post('/login', async (req, res) => {
@@ -184,8 +177,9 @@ router.post('/login', async (req, res) => {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
 
     const userList = await supabaseRequest('peserta', 'GET', {
-      // ambil kolom yang perlu + password hash untuk compare
-      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
+      // ambil kolom yang perlu + password untuk dicek
+      select:
+        'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
       or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
       limit: 1
     });
@@ -200,9 +194,10 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Akun Nonaktif/Blokir' });
     }
 
-    // Gunakan bcrypt.compare untuk membandingkan password dengan hash
-    const ok = await bcrypt.compare(String(p), String(user.password || ''));
-    if (!ok) return res.status(401).json({ success: false, message: 'Password salah' });
+    // TANPA HASH: cocokkan string langsung
+    if (String(user.password || '') !== String(p)) {
+      return res.status(401).json({ success: false, message: 'Password salah' });
+    }
 
     res.json({ success: true, data: safeUser(user) });
   } catch (e) {
@@ -386,15 +381,13 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Token reset sudah kadaluarsa' });
     }
 
-    // Hash password baru
-    const passwordHash = await bcrypt.hash(String(new_password), 10);
-
+    // TANPA HASH: simpan password plaintext
     // Update password user
     await supabaseRequest(
       'peserta',
       'PATCH',
       { id: `eq.${resetData.user_id}` },
-      { password: passwordHash }
+      { password: String(new_password) } // PLAINTEXT
     );
 
     // Update status reset menjadi completed
