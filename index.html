@@ -1506,6 +1506,35 @@
   }
 }
 
+    /* Di bagian CSS untuk button toggle password di kartu */
+#k_toggle_pass {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  margin-left: 10px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all var(--transition-base);
+}
+
+#k_toggle_pass:hover {
+  background: var(--primary-light);
+  transform: translateY(-1px);
+}
+
+#k_toggle_pass:active {
+  transform: translateY(0);
+}
+
+/* Untuk password di kartu */
+#k_pass {
+  letter-spacing: 2px;
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  font-size: 14px;
+}
   </style>
 </head>
 <body>
@@ -1842,34 +1871,51 @@
   </div>
 
   <!-- MODAL KARTU PESERTA -->
-  <div id="modal-kartu" class="modal-backdrop hidden">
-    <div class="modal-content" style="max-width:500px;">
-      <div class="kartu-visual">
-        <div class="kartu-watermark">KARTU UJIAN</div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-          <h3 style="color:var(--primary); margin:0;">KARTU PESERTA</h3>
-          <div id="k_jenis_tes" class="jenis-tes-badge"></div>
-        </div>
-        <table style="width:100%; font-size:13px;">
-          <tr><td style="color:#666; width:30%;">Nama</td><td style="font-weight:700;" id="k_nama"></td></tr>
-          <tr><td style="color:#666;">Sekolah</td><td style="font-weight:700;" id="k_sekolah"></td></tr>
-          <tr><td style="color:#666;">Username</td><td style="font-weight:700;" id="k_user"></td></tr>
-          <tr><td style="color:#666;">Password</td><td style="font-weight:700;" id="k_pass"></td></tr>
-          <tr><td style="color:#666;">Jenis Tes</td><td style="font-weight:700;" id="k_jenis"></td></tr>
-        </table>
-        <div style="background:var(--primary-light); color:var(--primary); text-align:center; padding:10px; margin-top:15px; border-radius:8px;">
-          <small>TOKEN UJIAN</small><br><strong style="font-size:24px;" id="k_token"></strong>
-        </div>
-        <div style="margin-top:15px; padding:10px; background:#f8fafc; border-radius:6px; font-size:12px; color:#666;">
-          <strong>Tips:</strong> Screenshot atau download kartu ini. Simpan username dan password Anda.
-        </div>
+<div id="modal-kartu" class="modal-backdrop hidden">
+  <div class="modal-content" style="max-width:500px;">
+    <div class="kartu-visual">
+      <div class="kartu-watermark">KARTU UJIAN</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h3 style="color:var(--primary); margin:0;">KARTU PESERTA</h3>
+        <div id="k_jenis_tes" class="jenis-tes-badge"></div>
       </div>
-      <div class="modal-actions" style="margin-top:15px;">
-        <button class="btn btn-primary" onclick="downloadKartu()">📥 Simpan Kartu</button>
-        <button class="btn btn-outline" onclick="closeKartu()">Masuk Dashboard</button>
+      <table style="width:100%; font-size:13px;">
+        <tr><td style="color:#666; width:30%;">Nama</td><td style="font-weight:700;" id="k_nama"></td></tr>
+        <tr><td style="color:#666;">Sekolah</td><td style="font-weight:700;" id="k_sekolah"></td></tr>
+        <tr><td style="color:#666;">Username</td><td style="font-weight:700;" id="k_user"></td></tr>
+        <tr>
+  <td style="color:#666;">Password</td>
+  <td style="font-weight:700;">
+    <span id="k_pass" style="letter-spacing:2px; font-family:'Courier New',monospace;"></span>
+    <div style="display:inline-flex; gap:5px; margin-left:10px;">
+      <button type="button" id="k_toggle_pass" 
+              onclick="toggleKartuPassword()" 
+              style="background:none; border:none; color:var(--primary); cursor:pointer; font-size:11px; padding:2px 6px; border-radius:3px;">
+        👁️ Tampilkan
+      </button>
+      <button type="button" id="k_copy_pass" 
+              onclick="copyKartuPassword()" 
+              style="background:var(--primary-light); border:none; color:var(--primary); cursor:pointer; font-size:11px; padding:2px 6px; border-radius:3px;">
+        📋 Copy
+      </button>
+    </div>
+  </td>
+</tr>
+        <tr><td style="color:#666;">Jenis Tes</td><td style="font-weight:700;" id="k_jenis"></td></tr>
+      </table>
+      <div style="background:var(--primary-light); color:var(--primary); text-align:center; padding:10px; margin-top:15px; border-radius:8px;">
+        <small>TOKEN UJIAN</small><br><strong style="font-size:24px;" id="k_token"></strong>
+      </div>
+      <div style="margin-top:15px; padding:10px; background:#f8fafc; border-radius:6px; font-size:12px; color:#666;">
+        <strong>⚠️ Keamanan:</strong> Password disimpan tanpa enkripsi. Jangan bagikan kartu ini.
       </div>
     </div>
+    <div class="modal-actions" style="margin-top:15px;">
+      <button class="btn btn-primary" onclick="downloadKartu()">📥 Simpan Kartu</button>
+      <button class="btn btn-outline" onclick="closeKartu()">Masuk Dashboard</button>
+    </div>
   </div>
+</div>
 
   <!-- MODAL FORGOT PASSWORD -->
 <div id="modal-forgot-password" class="modal-backdrop hidden">
@@ -1961,7 +2007,8 @@ let agendasLoaded = false;
 let jawabanData = null;
 let waktuMulaiUjian = null;
 let durasiUjian = 0;
-
+let kartuPasswordVisible = false;
+let originalPassword = '';
 // Zoom state
 let zoomedImg = null;
 let currentZoom = 1;
@@ -2676,12 +2723,20 @@ function showKartu(userData, agendaName, token, jenisTes) {
   const k_token = document.getElementById('k_token');
   const k_jenis = document.getElementById('k_jenis');
   const k_jenis_tes = document.getElementById('k_jenis_tes');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
   const modalKartu = document.getElementById('modal-kartu');
   
   if (k_nama) k_nama.innerText = userData.nama_peserta;
   if (k_sekolah) k_sekolah.innerText = userData.asal_sekolah;
   if (k_user) k_user.innerText = userData.nis_username;
-  if (k_pass) k_pass.innerText = '********'; // JANGAN tampilkan password/hash
+  
+  // Simpan password asli dan tampilkan sebagai bintang
+  originalPassword = userData.password || '';
+  if (k_pass) {
+    k_pass.innerText = '••••••••';
+    k_pass.dataset.original = originalPassword;
+  }
+  
   if (k_token) k_token.innerText = token;
   if (k_jenis) k_jenis.innerText = jenisTes || "Ujian Umum";
   
@@ -2691,11 +2746,66 @@ function showKartu(userData, agendaName, token, jenisTes) {
     k_jenis_tes.style.background = getJenisTesColor(jenisTes);
   }
   
+  // Reset toggle button
+  if (k_toggle_pass) {
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    kartuPasswordVisible = false;
+  }
+  
   if (modalKartu) {
     modalKartu.classList.remove('hidden');
   }
 }
 
+// Fungsi untuk toggle show/hide password di kartu
+function toggleKartuPassword() {
+  const k_pass = document.getElementById('k_pass');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  
+  if (!k_pass || !k_toggle_pass) return;
+  
+  kartuPasswordVisible = !kartuPasswordVisible;
+  
+  if (kartuPasswordVisible) {
+    // Tampilkan password asli
+    k_pass.innerText = originalPassword;
+    k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    k_toggle_pass.style.color = 'var(--primary-dark)';
+  } else {
+    // Sembunyikan dengan bintang
+    k_pass.innerText = '••••••••';
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.style.color = 'var(--primary)';
+  }
+}
+
+    // Tambahkan function copy
+function copyKartuPassword() {
+  if (!originalPassword) return;
+  
+  navigator.clipboard.writeText(originalPassword).then(() => {
+    showToast('Password disalin ke clipboard', 'success');
+    
+    // Feedback visual
+    const copyBtn = document.getElementById('k_copy_pass');
+    if (copyBtn) {
+      const originalText = copyBtn.innerHTML;
+      copyBtn.innerHTML = '✅ Disalin!';
+      copyBtn.style.background = 'var(--success)';
+      copyBtn.style.color = 'white';
+      
+      setTimeout(() => {
+        copyBtn.innerHTML = originalText;
+        copyBtn.style.background = 'var(--primary-light)';
+        copyBtn.style.color = 'var(--primary)';
+      }, 2000);
+    }
+  }).catch(err => {
+    console.error('Copy failed:', err);
+    showToast('Gagal menyalin password', 'error');
+  });
+}
+    
 /* FORGOT PASSWORD FUNCTIONS */
 let forgotUserId = null;
 let resetToken = null;
@@ -2946,6 +3056,17 @@ function downloadKartu() {
   const kartuVisual = document.querySelector('.kartu-visual');
   if (!kartuVisual) return;
   
+  // Simpan state password sebelum download
+  const wasVisible = kartuPasswordVisible;
+  const k_pass = document.getElementById('k_pass');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  
+  // Jika password sedang ditampilkan, sembunyikan dulu untuk screenshot
+  if (wasVisible && k_pass && k_toggle_pass) {
+    k_pass.innerText = '••••••••';
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+  }
+  
   html2canvas(kartuVisual, { 
     scale: 2, 
     useCORS: true, 
@@ -2957,12 +3078,23 @@ function downloadKartu() {
     link.href = canvas.toDataURL(); 
     link.click(); 
     showToast('Kartu berhasil diunduh', 'success');
+    
+    // Kembalikan state password jika sebelumnya visible
+    if (wasVisible && k_pass && k_toggle_pass) {
+      k_pass.innerText = originalPassword;
+      k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    }
   }).catch(err => {
     showToast('Gagal mengunduh kartu', 'error');
     console.error('Download error:', err);
+    
+    // Kembalikan state password jika error
+    if (wasVisible && k_pass && k_toggle_pass) {
+      k_pass.innerText = originalPassword;
+      k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    }
   }); 
 }
-
 function closeKartu() { 
   const modalKartu = document.getElementById('modal-kartu');
   if (modalKartu) {
