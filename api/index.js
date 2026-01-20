@@ -5,7 +5,6 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 
 // Load env dari .env saat lokal. Di Vercel, env diambil dari Environment Variables.
 dotenv.config();
@@ -19,39 +18,9 @@ app.use(express.json({ limit: '1mb' }));
 // Env
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const EMAIL_HOST = process.env.EMAIL_HOST;
-const EMAIL_PORT = process.env.EMAIL_PORT;
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
-const EMAIL_FROM = process.env.EMAIL_FROM || 'CBTKU 2026 <noreply@cbtku.com>';
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.warn('[WARN] SUPABASE_URL / SUPABASE_KEY belum diset. Set env di Vercel atau .env saat lokal.');
-}
-
-// Konfigurasi Nodemailer
-let transporter;
-if (EMAIL_HOST && EMAIL_USER && EMAIL_PASS) {
-  transporter = nodemailer.createTransport({
-    host: EMAIL_HOST,
-    port: EMAIL_PORT || 587,
-    secure: EMAIL_PORT == 465,
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS
-    }
-  });
-  
-  // Verifikasi koneksi email
-  transporter.verify(function(error, success) {
-    if (error) {
-      console.error('Email transporter error:', error);
-    } else {
-      console.log('Email transporter ready');
-    }
-  });
-} else {
-  console.warn('[WARN] Konfigurasi email tidak lengkap. OTP via email tidak akan berfungsi.');
 }
 
 // Helper: request ke Supabase REST
@@ -92,62 +61,6 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
   return response.status !== 204 ? await response.json() : null;
 }
 
-// Helper: Kirim email OTP
-async function sendOTPEmail(email, otp, name) {
-  if (!transporter) {
-    throw new Error('Konfigurasi email tidak tersedia');
-  }
-
-  const mailOptions = {
-    from: EMAIL_FROM,
-    to: email,
-    subject: 'Kode OTP untuk Reset Password - CBTKU 2026',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-        <div style="text-align: center; background: #dc2626; color: white; padding: 20px; border-radius: 10px 10px 0 0;">
-          <h1 style="margin: 0;">CBTKU 2026</h1>
-          <p style="margin: 5px 0 0 0; font-size: 14px;">Sistem Ujian Online</p>
-        </div>
-        
-        <div style="padding: 20px;">
-          <h2>Reset Password Akun Anda</h2>
-          <p>Halo <strong>${name}</strong>,</p>
-          <p>Anda telah meminta untuk mereset password akun CBTKU 2026 Anda. Gunakan kode OTP berikut untuk melanjutkan proses reset password:</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <div style="display: inline-block; background: #f0f0f0; padding: 15px 30px; border-radius: 8px; border: 2px dashed #dc2626;">
-              <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Kode OTP Anda:</div>
-              <div style="font-size: 32px; font-weight: bold; letter-spacing: 10px; color: #dc2626;">${otp}</div>
-            </div>
-          </div>
-          
-          <p><strong>Catatan penting:</strong></p>
-          <ul style="color: #666;">
-            <li>Kode OTP ini berlaku selama <strong>10 menit</strong></li>
-            <li>Jangan bagikan kode ini kepada siapapun</li>
-            <li>Jika Anda tidak meminta reset password, abaikan email ini</li>
-          </ul>
-          
-          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; font-size: 12px; color: #999;">
-            <p>Email ini dikirim secara otomatis. Mohon tidak membalas email ini.</p>
-            <p>&copy; ${new Date().getFullYear()} CBTKU 2026. All rights reserved.</p>
-          </div>
-        </div>
-      </div>
-    `,
-    text: `Kode OTP untuk reset password CBTKU 2026: ${otp}\n\nHalo ${name},\n\nGunakan kode OTP di atas untuk reset password. Kode berlaku 10 menit.\n\nJangan bagikan kode ini kepada siapapun.\n\nJika Anda tidak meminta reset password, abaikan email ini.\n\nSalam,\nTim CBTKU 2026`
-  };
-
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Email OTP sent to ${email}: ${info.messageId}`);
-    return true;
-  } catch (error) {
-    console.error('Error sending email:', error);
-    throw error;
-  }
-}
-
 function safeUser(u) {
   if (!u) return u;
   const copy = { ...u };
@@ -186,7 +99,7 @@ router.get('/agenda', async (req, res) => {
 });
 
 /**
- * POST /api/register - UPDATE untuk include email
+ * POST /api/register
  */
 router.post('/register', async (req, res) => {
   const form = req.body || {};
@@ -200,35 +113,26 @@ router.post('/register', async (req, res) => {
       'no_wa',
       'wa_ortu',
       'password',
-      'username',
-      'email' // Tambahkan email
+      'username'
     ]);
     if (err) return res.status(400).json({ success: false, message: err });
 
     const username = String(form.username).trim();
     const noWa = String(form.no_wa).trim();
-    const email = String(form.email).trim().toLowerCase();
-
-    // Validasi email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, message: 'Email tidak valid' });
-    }
 
     // basic sanitasi agar query Supabase "or" tidak aneh
     if (!/^[0-9A-Za-z_+.-]{3,50}$/.test(username) && !/^[0-9]{8,20}$/.test(username)) {
       return res.status(400).json({ success: false, message: 'Username tidak valid' });
     }
 
-    // Cek apakah email/username/wa sudah terdaftar
     const cek = await supabaseRequest('peserta', 'GET', {
       select: 'id',
-      or: `(nis_username.eq.${username},no_wa_peserta.eq.${noWa},email.eq.${email})`,
+      or: `(nis_username.eq.${username},no_wa_peserta.eq.${noWa})`,
       limit: 1
     });
 
     if (cek && cek.length > 0) {
-      return res.status(400).json({ success: false, message: 'Username/WA/Email sudah terdaftar!' });
+      return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
     // Hash password sebelum simpan
@@ -243,7 +147,6 @@ router.post('/register', async (req, res) => {
       asal_sekolah: String(form.sekolah),
       no_wa_peserta: noWa,
       no_wa_ortu: String(form.wa_ortu),
-      email: email, // Tambahkan email
       id_agenda: form.agenda_id,
       status: 'Aktif'
     };
@@ -282,8 +185,8 @@ router.post('/login', async (req, res) => {
 
     const userList = await supabaseRequest('peserta', 'GET', {
       // ambil kolom yang perlu + password hash untuk compare
-      select: 'id,nama_peserta,nis_username,email,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
-      or: `(nis_username.eq.${u},no_wa_peserta.eq.${u},email.eq.${u})`, // Tambahkan email
+      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
+      or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
       limit: 1
     });
 
@@ -310,17 +213,17 @@ router.post('/login', async (req, res) => {
 
 /**
  * POST /api/forgot-password
- * Minta reset password (kirim kode OTP via Email)
+ * Minta reset password (kirim kode OTP)
  */
 router.post('/forgot-password', async (req, res) => {
   const { username } = req.body || {};
   try {
-    if (!username) return res.status(400).json({ success: false, message: 'Username/Nomor WA/Email wajib diisi' });
+    if (!username) return res.status(400).json({ success: false, message: 'Username/Nomor WA wajib diisi' });
 
-    // Cari user berdasarkan username/no WA/email
+    // Cari user berdasarkan username/no WA
     const userList = await supabaseRequest('peserta', 'GET', {
-      select: 'id,nama_peserta,nis_username,email',
-      or: `(nis_username.eq.${username},no_wa_peserta.eq.${username},email.eq.${username})`,
+      select: 'id,nama_peserta,nis_username,no_wa_peserta',
+      or: `(nis_username.eq.${username},no_wa_peserta.eq.${username})`,
       limit: 1
     });
 
@@ -329,11 +232,6 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     const user = userList[0];
-    
-    // Pastikan user memiliki email
-    if (!user.email) {
-      return res.status(400).json({ success: false, message: 'Akun tidak memiliki email terdaftar' });
-    }
     
     // Generate OTP 6 digit
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -347,7 +245,6 @@ router.post('/forgot-password', async (req, res) => {
       {
         user_id: user.id,
         username: user.nis_username,
-        email: user.email,
         otp_code: otp,
         expires_at: otpExpiry.toISOString(),
         status: 'pending',
@@ -355,42 +252,18 @@ router.post('/forgot-password', async (req, res) => {
       }
     );
 
-    // Kirim OTP via Email
-    if (transporter) {
-      try {
-        await sendOTPEmail(user.email, otp, user.nama_peserta);
-        
-        res.json({ 
-          success: true, 
-          message: 'Kode OTP telah dikirim ke email Anda',
-          user_id: user.id,
-          nama: user.nama_peserta,
-          email: user.email
-        });
-      } catch (emailError) {
-        console.error('Gagal mengirim email:', emailError);
-        
-        // Jika gagal kirim email, fallback ke response biasa (untuk testing)
-        res.json({ 
-          success: true, 
-          message: 'Kode OTP berhasil dibuat (email gagal dikirim)',
-          otp: process.env.NODE_ENV === 'development' ? otp : undefined,
-          user_id: user.id,
-          nama: user.nama_peserta,
-          email: user.email
-        });
-      }
-    } else {
-      // Jika konfigurasi email tidak ada, return OTP untuk development
-      res.json({ 
-        success: true, 
-        message: 'Kode OTP berhasil dibuat',
-        otp: process.env.NODE_ENV === 'development' ? otp : undefined,
-        user_id: user.id,
-        nama: user.nama_peserta,
-        email: user.email
-      });
-    }
+    // NOTE: Dalam implementasi nyata, OTP dikirim via SMS/WhatsApp/Email
+    // Di sini kita hanya return di response untuk testing
+    console.log(`OTP untuk ${user.nis_username}: ${otp} (valid 10 menit)`);
+
+    res.json({ 
+      success: true, 
+      message: 'Kode OTP telah dikirim',
+      // Hanya untuk development/testing, hapus di production
+      otp: process.env.NODE_ENV === 'development' ? otp : undefined,
+      user_id: user.id,
+      nama: user.nama_peserta
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
@@ -408,7 +281,7 @@ router.post('/verify-otp', async (req, res) => {
 
     // Cari OTP yang valid
     const otpList = await supabaseRequest('password_reset', 'GET', {
-      select: 'id,otp_code,expires_at,status,email',
+      select: 'id,otp_code,expires_at,status',
       user_id: `eq.${user_id}`,
       otp_code: `eq.${otp}`,
       status: `eq.pending`,
@@ -489,7 +362,7 @@ router.post('/reset-password', async (req, res) => {
 
     // Cari reset token yang valid
     const resetList = await supabaseRequest('password_reset', 'GET', {
-      select: 'id,user_id,reset_token,token_expires_at,status,email',
+      select: 'id,user_id,reset_token,token_expires_at,status',
       reset_token: `eq.${reset_token}`,
       status: `eq.verified`,
       limit: 1
@@ -534,57 +407,6 @@ router.post('/reset-password', async (req, res) => {
         completed_at: new Date().toISOString()
       }
     );
-
-    // Kirim email konfirmasi jika email tersedia
-    if (transporter && resetData.email) {
-      try {
-        const userData = await supabaseRequest('peserta', 'GET', {
-          select: 'nama_peserta',
-          id: `eq.${resetData.user_id}`,
-          limit: 1
-        });
-
-        const userName = userData?.[0]?.nama_peserta || 'Pengguna';
-
-        await transporter.sendMail({
-          from: EMAIL_FROM,
-          to: resetData.email,
-          subject: 'Password Berhasil Direset - CBTKU 2026',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="background: #10b981; color: white; padding: 20px; border-radius: 10px; text-align: center;">
-                <h1 style="margin: 0;">✅ Password Berhasil Direset</h1>
-              </div>
-              
-              <div style="padding: 20px;">
-                <p>Halo <strong>${userName}</strong>,</p>
-                <p>Password akun CBTKU 2026 Anda telah berhasil direset.</p>
-                
-                <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #10b981; margin: 20px 0;">
-                  <p><strong>Informasi:</strong></p>
-                  <ul>
-                    <li>Waktu reset: ${new Date().toLocaleString('id-ID')}</li>
-                    <li>Akun: ${userName}</li>
-                    <li>Email: ${resetData.email}</li>
-                  </ul>
-                </div>
-                
-                <p>Jika Anda tidak melakukan reset password ini, segera hubungi administrator.</p>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${process.env.FRONTEND_URL || 'https://cbtku-2026.vercel.app'}" 
-                     style="background: #dc2626; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                    Login Sekarang
-                  </a>
-                </div>
-              </div>
-            </div>
-          `
-        });
-      } catch (emailError) {
-        console.error('Gagal mengirim email konfirmasi:', emailError);
-      }
-    }
 
     res.json({ 
       success: true, 
@@ -828,16 +650,6 @@ router.post('/selesai-ujian', async (req, res) => {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
-});
-
-// Health check endpoint
-router.get('/health', (req, res) => {
-  res.json({ 
-    success: true, 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    email_configured: !!transporter 
-  });
 });
 
 app.use('/api', router);
