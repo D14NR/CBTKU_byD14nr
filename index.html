@@ -1088,36 +1088,282 @@
       font-weight: 600;
     }
 
-    /* ===== TOAST ===== */
-    .toast-container {
-      position: fixed;
-      top: var(--space-xl);
-      right: var(--space-xl);
-      z-index: var(--z-toast);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-sm);
-      max-width: 320px;
-    }
+    /* ===== MODERN TOAST ===== */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+}
 
-    .toast {
-      background: white;
-      padding: var(--space-lg) var(--space-xl);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-xl);
-      border-left: 4px solid var(--primary);
-      display: flex;
-      align-items: center;
-      gap: var(--space-sm);
-      animation: slideIn var(--transition-base) ease-out;
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
+.toast {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: slideInToast 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  font-size: 14px;
+  line-height: 1.5;
+  border-left: 5px solid;
+  position: relative;
+  overflow: hidden;
+  transform-origin: top right;
+  backdrop-filter: blur(10px);
+}
 
-    .toast.success { border-left-color: var(--success); }
-    .toast.error { border-left-color: var(--danger); }
-    .toast.warning { border-left-color: var(--warning); }
-    .toast.info { border-left-color: var(--info); }
+.toast::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%);
+  z-index: -1;
+}
+
+/* Toast types */
+.toast.success {
+  border-left-color: #10b981;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.toast.error {
+  border-left-color: #ef4444;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff5f5 100%);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.toast.warning {
+  border-left-color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.toast.info {
+  border-left-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* Toast icon */
+.toast-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast.success .toast-icon {
+  background: #10b981;
+  color: white;
+}
+
+.toast.error .toast-icon {
+  background: #ef4444;
+  color: white;
+}
+
+.toast.warning .toast-icon {
+  background: #f59e0b;
+  color: white;
+}
+
+.toast.info .toast-icon {
+  background: #3b82f6;
+  color: white;
+}
+
+/* Toast content */
+.toast-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toast.success .toast-title {
+  color: #059669;
+}
+
+.toast.error .toast-title {
+  color: #dc2626;
+}
+
+.toast.warning .toast-title {
+  color: #d97706;
+}
+
+.toast.info .toast-title {
+  color: #1d4ed8;
+}
+
+.toast-message {
+  color: #374151;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+/* Close button */
+.toast-close {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.toast-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #6b7280;
+}
+
+/* Progress bar */
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  width: 100%;
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+}
+
+.toast-progress-bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  animation: progressBar 5s linear forwards;
+}
+
+.toast.success .toast-progress-bar {
+  background: #10b981;
+}
+
+.toast.error .toast-progress-bar {
+  background: #ef4444;
+}
+
+.toast.warning .toast-progress-bar {
+  background: #f59e0b;
+}
+
+.toast.info .toast-progress-bar {
+  background: #3b82f6;
+}
+
+/* Toast animations */
+@keyframes slideInToast {
+  from {
+    transform: translateX(100%) scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToast {
+  from {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%) scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes progressBar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.toast.exiting {
+  animation: slideOutToast 0.3s ease-out forwards;
+}
+
+/* Toast positions */
+.toast-top-left {
+  top: 20px;
+  left: 20px;
+  right: auto;
+}
+
+.toast-top-center {
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  right: auto;
+}
+
+.toast-bottom-right {
+  top: auto;
+  bottom: 20px;
+  right: 20px;
+}
+
+.toast-bottom-left {
+  top: auto;
+  bottom: 20px;
+  left: 20px;
+  right: auto;
+}
+
+.toast-bottom-center {
+  top: auto;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  right: auto;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .toast-container {
+    left: 20px;
+    right: 20px;
+    max-width: none;
+  }
+  
+  .toast {
+    max-width: 100%;
+  }
+}
 
     /* ===== LOADER ===== */
     .overlay-loader {
@@ -2017,76 +2263,223 @@ const MIN_ZOOM = 0.5;
 const ZOOM_STEP = 0.25;
 
 /* API HELPER */
-async function apiRequest(endpoint, method = 'GET', body = null) {
-  const options = {
+async function apiRequest(endpoint, method = 'GET', body = null, options = {}) {
+  const showSpinner = options.showSpinner !== false;
+  const errorToast = options.errorToast !== false;
+  
+  if (showSpinner) {
+    showLoader(true, options.loadingText || 'Memuat...', options);
+  }
+  
+  const apiOptions = {
     method: method.toUpperCase(),
     headers: {
       'Content-Type': 'application/json',
     }
   };
   
-  if (body && (options.method === 'POST' || options.method === 'PATCH')) {
-    options.body = JSON.stringify(body);
+  if (body && (apiOptions.method === 'POST' || apiOptions.method === 'PATCH')) {
+    apiOptions.body = JSON.stringify(body);
   }
   
   try {
-    showLoader(true, 'Memuat...');
-    const response = await fetch(`${API_URL}${endpoint}`, options);
+    const response = await fetch(`${API_URL}${endpoint}`, apiOptions);
+    const responseText = await response.text();
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API Error (${response.status}): ${errorText}`);
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
     }
     
-    const data = await response.json();
-    showLoader(false);
+    if (showSpinner) showLoader(false);
+    
+    if (!response.ok) {
+      if (errorToast) {
+        showToast(
+          `API Error (${response.status}): ${JSON.stringify(data)}`,
+          'error',
+          'Kesalahan Server'
+        );
+      }
+      throw new Error(`API Error (${response.status}): ${JSON.stringify(data)}`);
+    }
+    
     return data;
   } catch (error) {
-    showLoader(false);
-    showToast(`Error: ${error.message}`, 'error');
+    if (showSpinner) showLoader(false);
+    
+    if (errorToast) {
+      // Show user-friendly error message
+      let userMessage = 'Terjadi kesalahan koneksi';
+      
+      if (error.message.includes('Failed to fetch')) {
+        userMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
+      } else if (error.message.includes('Invalid JSON')) {
+        userMessage = 'Server mengembalikan respons tidak valid';
+      } else if (error.message.includes('API Error')) {
+        // Let showToast handle API error parsing
+        userMessage = error.message;
+      }
+      
+      showToast(userMessage, 'error', 'Kesalahan Jaringan');
+    }
+    
     console.error('API Request Error:', error);
     throw error;
   }
 }
-
 /* HELPERS */
-function showLoader(show, text = 'Memuat...') { 
+function showLoader(show, text = 'Memuat...', options = {}) {
   const loader = document.getElementById('overlay-loader');
   const textEl = document.getElementById('loader-text');
-  if (loader && textEl) {
-    textEl.innerText = text;
-    if (show) {
-      loader.classList.remove('hidden');
+  
+  if (!loader || !textEl) return;
+  
+  if (show) {
+    // Customize loader based on options
+    if (options.type === 'success') {
+      loader.style.background = 'linear-gradient(135deg, #f0fdf4 0%, rgba(255,255,255,0.98) 100%)';
+      textEl.style.color = '#059669';
+    } else if (options.type === 'error') {
+      loader.style.background = 'linear-gradient(135deg, #fef2f2 0%, rgba(255,255,255,0.98) 100%)';
+      textEl.style.color = '#dc2626';
     } else {
-      loader.classList.add('hidden');
+      loader.style.background = 'rgba(255, 255, 255, 0.98)';
+      textEl.style.color = 'var(--text-muted)';
     }
+    
+    textEl.innerText = text;
+    loader.classList.remove('hidden');
+    
+    // Add spinner animation based on type
+    const spinner = loader.querySelector('.loader-spinner');
+    if (spinner) {
+      if (options.type === 'success') {
+        spinner.style.borderTopColor = '#10b981';
+      } else if (options.type === 'error') {
+        spinner.style.borderTopColor = '#ef4444';
+      } else {
+        spinner.style.borderTopColor = 'var(--primary)';
+      }
+    }
+  } else {
+    loader.classList.add('hidden');
   }
 }
 
-function showToast(msg, type = 'success') { 
+function showToast(message, type = 'success', title = '', duration = 5000) {
   const container = document.getElementById('toast-container');
   if (!container) return;
   
-  const toast = document.createElement('div'); 
-  toast.className = `toast ${type}`; 
-  toast.innerHTML = `
-    <div style="flex-shrink:0;">
-      ${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}
-    </div>
-    <div>${msg}</div>
-  `;
-  container.appendChild(toast); 
+  // Parse API error messages
+  let cleanMessage = message;
+  let cleanTitle = title;
   
-  // Auto remove after 3 seconds
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(100%)';
-    setTimeout(() => {
-      if (toast.parentNode === container) {
-        container.removeChild(toast);
+  // Handle API error format
+  if (type === 'error' && message.includes('API Error')) {
+    try {
+      // Extract JSON from error message
+      const jsonMatch = message.match(/\{.*\}/);
+      if (jsonMatch) {
+        const errorObj = JSON.parse(jsonMatch[0]);
+        cleanMessage = errorObj.message || 'Terjadi kesalahan';
+      } else {
+        // Clean up error message
+        cleanMessage = message.replace('Error: API Error (400): ', '')
+                              .replace('Error: API Error (500): ', '')
+                              .replace('Error: API Error (404): ', '');
       }
-    }, 300);
-  }, 3000);
+    } catch (e) {
+      // If parsing fails, use original message
+      cleanMessage = message.replace('Error: API Error', 'Error:');
+    }
+    
+    if (!cleanTitle) cleanTitle = 'Kesalahan';
+  }
+  
+  // Set default titles based on type
+  if (!cleanTitle) {
+    const titles = {
+      success: 'Berhasil',
+      error: 'Kesalahan',
+      warning: 'Peringatan',
+      info: 'Informasi'
+    };
+    cleanTitle = titles[type] || 'Notifikasi';
+  }
+  
+  // Set icons
+  const icons = {
+    success: '✓',
+    error: '✕',
+    warning: '⚠',
+    info: 'ℹ'
+  };
+  
+  const toastId = 'toast-' + Date.now();
+  
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.id = toastId;
+  toast.innerHTML = `
+    <div class="toast-icon">
+      ${icons[type] || 'ℹ'}
+    </div>
+    <div class="toast-content">
+      <div class="toast-title">
+        ${cleanTitle}
+      </div>
+      <div class="toast-message">
+        ${cleanMessage}
+      </div>
+    </div>
+    <button class="toast-close" onclick="removeToast('${toastId}')">×</button>
+    <div class="toast-progress">
+      <div class="toast-progress-bar"></div>
+    </div>
+  `;
+  
+  container.appendChild(toast);
+  
+  // Auto remove after duration
+  const timeout = setTimeout(() => {
+    removeToast(toastId);
+  }, duration);
+  
+  // Store timeout ID for manual removal
+  toast.dataset.timeoutId = timeout;
+  
+  return toastId;
+}
+
+function removeToast(toastId) {
+  const toast = document.getElementById(toastId);
+  if (!toast) return;
+  
+  // Clear timeout if exists
+  if (toast.dataset.timeoutId) {
+    clearTimeout(parseInt(toast.dataset.timeoutId));
+  }
+  
+  // Start exit animation
+  toast.classList.add('exiting');
+  
+  // Remove after animation
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }, 300);
+}
+
+// Clear all toasts
+function clearAllToasts() {
+  const container = document.getElementById('toast-container');
+  if (container) {
+    container.innerHTML = '';
+  }
 }
 
 function showCustomAlert(msg, title = 'Info', icon = '⚠️') { 
@@ -2100,6 +2493,54 @@ function showCustomAlert(msg, title = 'Info', icon = '⚠️') {
     alertMsg.innerText = msg; 
     alertIcon.innerText = icon; 
     alertModal.classList.remove('hidden');
+  }
+}
+
+    function showUserFriendlyError(error) {
+  const errorMap = {
+    'Username/WA sudah terdaftar!': '❌ Username atau nomor WA sudah terdaftar. Silakan gunakan data lain.',
+    'Password salah': '🔒 Password yang Anda masukkan salah. Coba lagi.',
+    'Akun tidak ditemukan': '🔍 Akun tidak ditemukan. Periksa username atau nomor WA Anda.',
+    'Akun Nonaktif/Blokir': '🚫 Akun Anda dinonaktifkan atau diblokir. Hubungi admin.',
+    'Token Salah!': '🔑 Token yang Anda masukkan salah. Coba lagi.',
+    'agenda_id & token wajib': '⚠️ Agenda dan token wajib diisi.',
+    'Username/Nomor WA wajib diisi': '📱 Username atau nomor WA wajib diisi.',
+    'User & password wajib diisi': '🔐 Username dan password wajib diisi.',
+    'Kode OTP tidak valid': '📱 Kode OTP yang Anda masukkan tidak valid.',
+    'Kode OTP sudah kadaluarsa': '⏰ Kode OTP sudah kadaluarsa. Minta kode baru.',
+    'Token reset tidak valid': '🔑 Token reset tidak valid. Coba reset password lagi.',
+    'Token reset sudah kadaluarsa': '⏰ Token reset sudah kadaluarsa. Coba reset password lagi.',
+    'Password baru tidak cocok': '🔒 Password baru dan konfirmasi tidak cocok.',
+    'Password minimal 6 karakter': '🔒 Password minimal 6 karakter.',
+    'Agenda error': '📅 Terjadi kesalahan dengan agenda ujian.',
+    'Mapel Invalid': '📚 Mata pelajaran tidak valid.',
+    'pid, aid, mid wajib': '⚠️ Data ujian tidak lengkap.',
+    'agenda_id & peserta_id wajib': '⚠️ Agenda dan peserta wajib diisi.',
+    'agenda_id, peserta_id, mapel_id wajib': '⚠️ Data ujian tidak lengkap.'
+  };
+  
+  // Clean error message
+  let cleanError = error;
+  if (error.includes('API Error')) {
+    try {
+      const jsonMatch = error.match(/\{.*\}/);
+      if (jsonMatch) {
+        const errorObj = JSON.parse(jsonMatch[0]);
+        cleanError = errorObj.message || error;
+      }
+    } catch (e) {
+      // If parsing fails, use original
+    }
+  }
+  
+  // Check if we have a friendly message for this error
+  const friendlyMessage = errorMap[cleanError];
+  
+  if (friendlyMessage) {
+    showToast(friendlyMessage, 'error');
+  } else {
+    // Default error handling
+    showToast(cleanError, 'error');
   }
 }
 
@@ -4331,6 +4772,13 @@ window.closeZoomModal = closeZoomModal;
 window.resetZoom = resetZoom;
 window.scrollToTop = scrollToTop;
 window.scrollToBottom = scrollToBottom;
+window.showToast = showToast;
+window.showSuccessToast = showSuccessToast;
+window.showErrorToast = showErrorToast;
+window.showWarningToast = showWarningToast;
+window.showInfoToast = showInfoToast;
+window.clearAllToasts = clearAllToasts;
+window.removeToast = removeToast;
 
 // Initialize event listeners for navigation buttons
 document.addEventListener('DOMContentLoaded', function() {
