@@ -682,25 +682,37 @@
 
     /* Save Status */
     .save-status {
-      position: absolute;
-      top: var(--space-lg);
-      right: var(--space-xl);
-      font-size: 0.6875rem;
-      font-weight: 700;
-      color: var(--success);
-      display: flex;
-      align-items: center;
-      gap: var(--space-xs);
-      opacity: 0;
-      transition: opacity var(--transition-base);
-      background: white;
-      padding: var(--space-xs) var(--space-sm);
-      border-radius: var(--radius-md);
-      border: 1px solid var(--success);
-      z-index: 1;
-    }
+  position: absolute;
+  top: var(--space-lg);
+  right: var(--space-xl);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: white;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--success);
+  z-index: 1;
+  pointer-events: none;
+}
 
-    .save-status.show { opacity: 1; }
+
+    .save-status.show { 
+  opacity: 0.8; 
+  animation: fadeInOut 2s ease;
+}
+
+    @keyframes fadeInOut {
+  0% { opacity: 0; }
+  20% { opacity: 0.8; }
+  80% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
 
     .pulse-dot {
       width: 8px;
@@ -2266,6 +2278,9 @@ let waktuMulaiUjian = null;
 let durasiUjian = 0;
 let kartuPasswordVisible = false;
 let originalPassword = '';
+let saveTimeout = null;
+let autoSaveInterval = null
+const SAVE_DELAY = 1500; 
 // Zoom state
 let zoomedImg = null;
 let currentZoom = 1;
@@ -3392,12 +3407,12 @@ function toggleKartuPassword() {
     } else {
       k_pass.innerText = 'password123'; // fallback
     }
-    k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    k_toggle_pass.innerHTML = 'Sembunyikan';
     k_toggle_pass.style.color = 'var(--primary-dark)';
   } else {
     // Sembunyikan dengan bintang
     k_pass.innerText = '••••••••';
-    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.innerHTML = 'Tampilkan';
     k_toggle_pass.style.color = 'var(--primary)';
   }
 }
@@ -4091,6 +4106,7 @@ async function initExamSession() {
     
     qIdx = 0; 
     renderQuestion(0);
+    startAutoSave();
     
     // Hitung waktu selesai
     const startTime = new Date(waktuMulaiUjian).getTime();
@@ -4297,7 +4313,7 @@ function renderQuestion(idx) {
     });
   } else {
     html += `
-      <textarea class="form-control" style="height:100px;" onblur="saveSingleAnswer('${question.id}',this.value)" placeholder="Ketik jawaban Anda di sini...">
+      <textarea class="form-control" style="height:100px;" oninput="debounceSave('${question.id}', this.value)" placeholder="Ketik jawaban Anda di sini...">
         ${answer && answer !== '-' ? answer : ''}
       </textarea>
     `;
@@ -4326,15 +4342,81 @@ function renderQuestion(idx) {
 
 /* SAVING FUNCTIONS */
 async function saveSingleAnswer(questionId, value) {
+  // Update UI langsung (tanpa loading)
+  answers[questionId] = value;
+  renderNavigation(); // Update status navigasi
+  
+  // Debounce: Hapus timeout sebelumnya jika ada
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  // Tampilkan indikator "menyimpan" yang lebih halus
   const saveStatus = document.getElementById('save-st');
   if (saveStatus) {
+    saveStatus.style.opacity = '0.7';
     saveStatus.classList.add('show');
   }
   
-  answers[questionId] = value;
+  // Set timeout untuk save dengan delay
+  saveTimeout = setTimeout(async () => {
+    try {
+      // Format jawaban untuk dikirim ke server
+      const jawabanArray = questions.map(q => answers[q.id] || '-');
+      const jawabanString = jawabanArray.join('|');
+      
+      await apiRequest('/save-jawaban', 'POST', {
+        pid: user.id,
+        aid: user.id_agenda,
+        mid: mapel.id,
+        jwb: jawabanString
+      }, {
+        showSpinner: false, // Jangan tampilkan spinner utama
+        errorToast: false   // Jangan tampilkan toast error
+      });
+      
+      // Tampilkan feedback sukses yang subtle
+      if (saveStatus) {
+        saveStatus.style.opacity = '1';
+        saveStatus.innerHTML = '<div class="pulse-dot"></div>Tersimpan';
+        
+        // Hilangkan secara perlahan setelah 1 detik
+        setTimeout(() => {
+          saveStatus.classList.remove('show');
+        }, 1000);
+      }
+      
+    } catch (error) {
+      console.error('Save error:', error);
+      
+      // Tampilkan error yang lebih user-friendly
+      if (saveStatus) {
+        saveStatus.innerHTML = '<div style="color:#ef4444;">✗ Gagal</div>';
+        saveStatus.style.color = '#ef4444';
+        
+        // Kembalikan ke normal setelah 2 detik
+        setTimeout(() => {
+          saveStatus.innerHTML = '<div class="pulse-dot"></div>Menyimpan...';
+          saveStatus.style.color = '';
+          saveStatus.classList.remove('show');
+        }, 2000);
+      }
+    }
+  }, SAVE_DELAY);
+}
+
+    function startAutoSave() {
+  if (autoSaveInterval) clearInterval(autoSaveInterval);
   
+  autoSaveInterval = setInterval(() => {
+    if (Object.keys(answers).length > 0) {
+      autoSaveAnswers();
+    }
+  }, 30000); // Save otomatis setiap 30 detik
+}
+
+async function autoSaveAnswers() {
   try {
-    // Format jawaban untuk dikirim ke server
     const jawabanArray = questions.map(q => answers[q.id] || '-');
     const jawabanString = jawabanArray.join('|');
     
@@ -4343,22 +4425,15 @@ async function saveSingleAnswer(questionId, value) {
       aid: user.id_agenda,
       mid: mapel.id,
       jwb: jawabanString
+    }, {
+      showSpinner: false,
+      errorToast: false
     });
     
-    setTimeout(() => { 
-      if (saveStatus) {
-        saveStatus.classList.remove('show');
-      }
-    }, 500);
+    console.log('Auto-save berhasil');
   } catch (error) {
-    if (saveStatus) {
-      saveStatus.classList.remove('show');
-    }
-    showToast('Gagal menyimpan', 'error');
-    console.error('Save error:', error);
+    console.error('Auto-save error:', error);
   }
-  
-  renderNavigation();
 }
 
 function saveComplexAnswer(questionId) {
@@ -4381,6 +4456,25 @@ function saveTrueFalse(questionId) {
   saveSingleAnswer(questionId, answersArray.join(','));
 }
 
+function debounceSave(questionId, value) {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  saveTimeout = setTimeout(() => {
+    saveSingleAnswer(questionId, value);
+  }, SAVE_DELAY);
+}
+
+// Untuk textarea di renderQuestion()
+html += `
+  <textarea class="form-control" style="height:100px;" 
+    oninput="debounceSave('${question.id}', this.value)" 
+    placeholder="Ketik jawaban Anda di sini...">
+    ${answer && answer !== '-' ? answer : ''}
+  </textarea>
+`;
+    
 function handleMatch(side, id) {
   if (!matchSelection) {
     matchSelection = {side, id};
