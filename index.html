@@ -2293,6 +2293,15 @@ async function preloadAllImages() {
     if (question.gambar_url && question.gambar_url.trim() !== '') {
       imageUrls.add(question.gambar_url);
     }
+
+// Optimasi URL gambar jika memungkinkan
+function optimizeImageUrl(url) {
+  // Jika server mendukung parameter ukuran, tambahkan parameter
+  if (url.includes('?')) {
+    return url + '&w=800&q=75'; // Contoh: lebar 800px, kualitas 75%
+  }
+  return url;
+}
     
     // Juga preload gambar dari pilihan (jika ada)
     ['a', 'b', 'c', 'd', 'e'].forEach(opt => {
@@ -5280,13 +5289,6 @@ function downloadHasilUjian() {
     console.error('Download canvas error:', err);
   });
 }
-
-  function optimizeImageUrl(url) {
-  // Jika server mendukung parameter ukuran, tambahkan parameter
-  if (url.includes('?')) {
-    return url + '&w=800&q=75'; // Contoh: lebar 800px, kualitas 75%
-  }
-  return url;
 
 /* GLOBAL FUNCTION EXPORTS */
 window.toggleAuth = toggleAuth;
