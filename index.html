@@ -2326,27 +2326,44 @@ async function apiRequest(endpoint, method = 'GET', body = null, options = {}) {
   }
   
   try {
+    console.log(`API Request: ${API_URL}${endpoint}`);
+    
     const response = await fetch(`${API_URL}${endpoint}`, apiOptions);
     const responseText = await response.text();
+    
+    console.log(`API Response (${response.status}): ${responseText.substring(0, 200)}...`);
     
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (e) {
-      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+      // Jika bukan JSON, coba parsing sebagai plain text
+      console.warn('Response is not JSON, treating as text:', responseText.substring(0, 100));
+      
+      if (showSpinner) showLoader(false);
+      
+      if (response.ok) {
+        // Jika response OK tapi bukan JSON, return sebagai text
+        return { success: true, data: responseText, raw: true };
+      } else {
+        // Jika error dan bukan JSON, throw error dengan teks
+        throw new Error(`Server Error (${response.status}): ${responseText.substring(0, 200)}`);
+      }
     }
     
     if (showSpinner) showLoader(false);
     
     if (!response.ok) {
+      const errorMsg = data.message || data.error || `HTTP ${response.status}`;
+      
       if (errorToast) {
         showToast(
-          `API Error (${response.status}): ${JSON.stringify(data)}`,
+          errorMsg,
           'error',
           'Kesalahan Server'
         );
       }
-      throw new Error(`API Error (${response.status}): ${JSON.stringify(data)}`);
+      throw new Error(`API Error (${response.status}): ${errorMsg}`);
     }
     
     return data;
@@ -2354,26 +2371,32 @@ async function apiRequest(endpoint, method = 'GET', body = null, options = {}) {
     if (showSpinner) showLoader(false);
     
     if (errorToast) {
-      // Show user-friendly error message
       let userMessage = 'Terjadi kesalahan koneksi';
       
       if (error.message.includes('Failed to fetch')) {
-        userMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
+        userMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet dan pastikan server API berjalan.';
+      } else if (error.message.includes('Server Error')) {
+        // Ambil pesan error dari server
+        userMessage = error.message.replace('Server Error', 'Error Server');
       } else if (error.message.includes('Invalid JSON')) {
-        userMessage = 'Server mengembalikan respons tidak valid';
-      } else if (error.message.includes('API Error')) {
-        // Let showToast handle API error parsing
+        userMessage = 'Server mengembalikan respons tidak valid. Periksa endpoint API.';
+      } else {
         userMessage = error.message;
       }
       
       showToast(userMessage, 'error', 'Kesalahan Jaringan');
     }
     
-    console.error('API Request Error:', error);
+    console.error('API Request Error:', {
+      endpoint: `${API_URL}${endpoint}`,
+      error: error.message,
+      method: method,
+      body: body
+    });
+    
     throw error;
   }
 }
-
 /* HELPERS */
 function showLoader(show, text = 'Memuat...', options = {}) {
   const loader = document.getElementById('overlay-loader');
