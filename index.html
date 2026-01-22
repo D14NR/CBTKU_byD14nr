@@ -692,26 +692,15 @@
       align-items: center;
       gap: var(--space-xs);
       opacity: 0;
-      transition: opacity 0.3s ease;
+      transition: opacity var(--transition-base);
       background: white;
       padding: var(--space-xs) var(--space-sm);
       border-radius: var(--radius-md);
       border: 1px solid var(--success);
       z-index: 1;
-      pointer-events: none;
     }
 
-    .save-status.show { 
-      opacity: 0.8; 
-      animation: fadeInOut 2s ease;
-    }
-
-    @keyframes fadeInOut {
-      0% { opacity: 0; }
-      20% { opacity: 0.8; }
-      80% { opacity: 0.8; }
-      100% { opacity: 0; }
-    }
+    .save-status.show { opacity: 1; }
 
     .pulse-dot {
       width: 8px;
@@ -1803,22 +1792,6 @@
   margin-left: 10px;
   display: none; /* Set ke 'inline' untuk debugging */
 }
-
-    /* Loading skeleton untuk gambar */
-.img-skeleton {
-  width: 100%;
-  height: 200px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
-  border-radius: 8px;
-  margin: 10px 0;
-}
-
-@keyframes loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
   </style>
 </head>
 <body>
@@ -2293,11 +2266,6 @@ let waktuMulaiUjian = null;
 let durasiUjian = 0;
 let kartuPasswordVisible = false;
 let originalPassword = '';
-let saveTimeout = null;
-let autoSaveInterval = null;
-let imageCache = {};
-const SAVE_DELAY = 1500;
-    
 // Zoom state
 let zoomedImg = null;
 let currentZoom = 1;
@@ -2326,44 +2294,27 @@ async function apiRequest(endpoint, method = 'GET', body = null, options = {}) {
   }
   
   try {
-    console.log(`API Request: ${API_URL}${endpoint}`);
-    
     const response = await fetch(`${API_URL}${endpoint}`, apiOptions);
     const responseText = await response.text();
-    
-    console.log(`API Response (${response.status}): ${responseText.substring(0, 200)}...`);
     
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (e) {
-      // Jika bukan JSON, coba parsing sebagai plain text
-      console.warn('Response is not JSON, treating as text:', responseText.substring(0, 100));
-      
-      if (showSpinner) showLoader(false);
-      
-      if (response.ok) {
-        // Jika response OK tapi bukan JSON, return sebagai text
-        return { success: true, data: responseText, raw: true };
-      } else {
-        // Jika error dan bukan JSON, throw error dengan teks
-        throw new Error(`Server Error (${response.status}): ${responseText.substring(0, 200)}`);
-      }
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
     }
     
     if (showSpinner) showLoader(false);
     
     if (!response.ok) {
-      const errorMsg = data.message || data.error || `HTTP ${response.status}`;
-      
       if (errorToast) {
         showToast(
-          errorMsg,
+          `API Error (${response.status}): ${JSON.stringify(data)}`,
           'error',
           'Kesalahan Server'
         );
       }
-      throw new Error(`API Error (${response.status}): ${errorMsg}`);
+      throw new Error(`API Error (${response.status}): ${JSON.stringify(data)}`);
     }
     
     return data;
@@ -2371,29 +2322,22 @@ async function apiRequest(endpoint, method = 'GET', body = null, options = {}) {
     if (showSpinner) showLoader(false);
     
     if (errorToast) {
+      // Show user-friendly error message
       let userMessage = 'Terjadi kesalahan koneksi';
       
       if (error.message.includes('Failed to fetch')) {
-        userMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet dan pastikan server API berjalan.';
-      } else if (error.message.includes('Server Error')) {
-        // Ambil pesan error dari server
-        userMessage = error.message.replace('Server Error', 'Error Server');
+        userMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
       } else if (error.message.includes('Invalid JSON')) {
-        userMessage = 'Server mengembalikan respons tidak valid. Periksa endpoint API.';
-      } else {
+        userMessage = 'Server mengembalikan respons tidak valid';
+      } else if (error.message.includes('API Error')) {
+        // Let showToast handle API error parsing
         userMessage = error.message;
       }
       
       showToast(userMessage, 'error', 'Kesalahan Jaringan');
     }
     
-    console.error('API Request Error:', {
-      endpoint: `${API_URL}${endpoint}`,
-      error: error.message,
-      method: method,
-      body: body
-    });
-    
+    console.error('API Request Error:', error);
     throw error;
   }
 }
@@ -2563,7 +2507,7 @@ function showCustomAlert(msg, title = 'Info', icon = '⚠️') {
   }
 }
 
-function showUserFriendlyError(error) {
+    function showUserFriendlyError(error) {
   const errorMap = {
     'Username/WA sudah terdaftar!': '❌ Username atau nomor WA sudah terdaftar. Silakan gunakan data lain.',
     'Password salah': '🔒 Password yang Anda masukkan salah. Coba lagi.',
@@ -3353,8 +3297,138 @@ function onRegisterSuccess(userData, password) {
 function onLoginSuccess(userData, password) {
   window.lastLoginPassword = password;
   setKartuPassword(password);
+}function showKartu(userData, agendaName, token, jenisTes) {
+  const k_nama = document.getElementById('k_nama');
+  const k_sekolah = document.getElementById('k_sekolah');
+  const k_user = document.getElementById('k_user');
+  const k_pass = document.getElementById('k_pass');
+  const k_token = document.getElementById('k_token');
+  const k_jenis = document.getElementById('k_jenis');
+  const k_jenis_tes = document.getElementById('k_jenis_tes');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  const modalKartu = document.getElementById('modal-kartu');
+  
+  if (k_nama) k_nama.innerText = userData.nama_peserta;
+  if (k_sekolah) k_sekolah.innerText = userData.asal_sekolah;
+  if (k_user) k_user.innerText = userData.nis_username;
+  
+  // ⭐⭐ SOLUSI UTAMA: Dapatkan password dari berbagai sumber ⭐⭐
+  
+  // 1. Coba dari window object (setelah register/login)
+  if (window.lastRegisteredPassword) {
+    originalPassword = window.lastRegisteredPassword;
+    console.log('Password dari register:', originalPassword);
+  } 
+  else if (window.lastLoginPassword) {
+    originalPassword = window.lastLoginPassword;
+    console.log('Password dari login:', originalPassword);
+  }
+  // 2. Coba dari form input yang masih terbuka
+  else if (document.getElementById('r_pass') && document.getElementById('r_pass').value) {
+    originalPassword = document.getElementById('r_pass').value;
+    console.log('Password dari form register:', originalPassword);
+  }
+  else if (document.getElementById('l_pass') && document.getElementById('l_pass').value) {
+    originalPassword = document.getElementById('l_pass').value;
+    console.log('Password dari form login:', originalPassword);
+  }
+  // 3. Fallback: gunakan username sebagai password (konvensi umum)
+  else {
+    originalPassword = userData.nis_username || 'siswa123';
+    console.log('Password fallback:', originalPassword);
+  }
+  
+  // Tampilkan di kartu
+  if (k_pass) {
+    k_pass.innerText = '••••••••';
+    k_pass.dataset.original = originalPassword;
+    console.log('Password diset ke kartu:', originalPassword);
+  }
+  
+  if (k_token) k_token.innerText = token;
+  if (k_jenis) k_jenis.innerText = jenisTes || "Ujian Umum";
+  
+  if (k_jenis_tes) {
+    k_jenis_tes.innerText = jenisTes || "Ujian Umum";
+    k_jenis_tes.className = getJenisTesClass(jenisTes);
+    k_jenis_tes.style.background = getJenisTesColor(jenisTes);
+  }
+  
+  // Reset toggle button
+  if (k_toggle_pass) {
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.style.display = 'inline-block';
+    kartuPasswordVisible = false;
+  }
+  
+  if (modalKartu) {
+    modalKartu.classList.remove('hidden');
+  }
 }
 
+function toggleKartuPassword() {
+  const k_pass = document.getElementById('k_pass');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  
+  if (!k_pass || !k_toggle_pass) {
+    console.error('Element kartu password tidak ditemukan');
+    return;
+  }
+  
+  kartuPasswordVisible = !kartuPasswordVisible;
+  
+  console.log('Toggle password:', {
+    visible: kartuPasswordVisible,
+    originalPassword: originalPassword,
+    elementText: k_pass.innerText
+  });
+  
+  if (kartuPasswordVisible) {
+    // Tampilkan password asli
+    if (originalPassword) {
+      k_pass.innerText = originalPassword;
+    } else if (k_pass.dataset.original) {
+      k_pass.innerText = k_pass.dataset.original;
+    } else {
+      k_pass.innerText = 'password123'; // fallback
+    }
+    k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    k_toggle_pass.style.color = 'var(--primary-dark)';
+  } else {
+    // Sembunyikan dengan bintang
+    k_pass.innerText = '••••••••';
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+    k_toggle_pass.style.color = 'var(--primary)';
+  }
+}
+
+// Fungsi untuk set password secara manual (bisa dipanggil dari mana saja)
+function setKartuPassword(password) {
+  originalPassword = password;
+  console.log('Password manual diset:', password);
+  
+  const k_pass = document.getElementById('k_pass');
+  if (k_pass) {
+    if (kartuPasswordVisible) {
+      k_pass.innerText = password;
+    }
+    k_pass.dataset.original = password;
+  }
+}
+
+// Panggil ini setelah register sukses
+function onRegisterSuccess(userData, password) {
+  window.lastRegisteredPassword = password;
+  window.lastRegisteredUsername = userData.nis_username;
+  setKartuPassword(password);
+}
+
+// Panggil ini setelah login sukses  
+function onLoginSuccess(userData, password) {
+  window.lastLoginPassword = password;
+  setKartuPassword(password);
+}
+    // Tambahkan function copy
 function copyKartuPassword() {
   if (!originalPassword) return;
   
@@ -3670,7 +3744,6 @@ function downloadKartu() {
     }
   }); 
 }
-
 function closeKartu() { 
   const modalKartu = document.getElementById('modal-kartu');
   if (modalKartu) {
@@ -3955,717 +4028,472 @@ async function goMapel() {
   }
 }
 
-/* DEBOUNCE HELPER */
-function debounceSave(questionId, value) {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-  }
-  
-  saveTimeout = setTimeout(() => {
-    saveAnswer(questionId, value);
-  }, SAVE_DELAY);
-}
-
-/* EXAM START */
-async function startExam(mapelId) {
+/* EXAM */
+function startExam(mapelId) {
   pendingMapelId = mapelId;
-  
   const rulesModal = document.getElementById('modal-start-rules');
   if (rulesModal) {
     rulesModal.classList.remove('hidden');
   }
 }
 
-async function confirmStartExam() {
-  if (!pendingMapelId) return;
-  
+function confirmStartExam() {
   const rulesModal = document.getElementById('modal-start-rules');
   if (rulesModal) {
     rulesModal.classList.add('hidden');
   }
   
-  await loadExamData(pendingMapelId);
-  pendingMapelId = null;
-}
-
-async function loadExamData(mapelId) {
-  showLoader(true, 'Memuat soal...');
-  
-  try {
-    // Ambil data mapel
-    const result = await apiRequest(`/soal?agenda_id=${user.id_agenda}&peserta_id=${user.id}&mapel_id=${mapelId}`);
-    
-    if (!result.success || !result.data || !result.mapel) {
-      showLoader(false);
-      showToast(result.message || 'Gagal memuat soal', 'error');
-      goMapel();
-      return;
-    }
-    
-    // Simpan data
-    mapel = result.mapel;
-    questions = result.data || [];
-    jawabanData = result.jawaban_data || null;
-    
-    if (questions.length === 0) {
-      showLoader(false);
-      showToast('Tidak ada soal untuk mapel ini', 'warning');
-      goMapel();
-      return;
-    }
-    
-    // Inisialisasi state jawaban
-    qIdx = 0;
-    answers = {};
-    ragu = {};
-    
-    // Jika ada data jawaban sebelumnya, load
-    if (jawabanData && jawabanData.jawaban) {
-      try {
-        const savedAnswers = JSON.parse(jawabanData.jawaban);
-        if (typeof savedAnswers === 'object') {
-          answers = savedAnswers;
-        }
-      } catch (e) {
-        console.error('Error parsing saved answers:', e);
-      }
-    }
-    
-    // Jika ada data ragu sebelumnya, load
-    if (jawabanData && jawabanData.tandaragu) {
-      try {
-        const savedRagu = JSON.parse(jawabanData.tandaragu);
-        if (typeof savedRagu === 'object') {
-          ragu = savedRagu;
-        }
-      } catch (e) {
-        console.error('Error parsing saved ragu:', e);
-      }
-    }
-    
-    // Setup timer
-    waktuMulaiUjian = jawabanData && jawabanData.waktu_mulai ? new Date(jawabanData.waktu_mulai) : new Date();
-    durasiUjian = (mapel.durasi_ujian || 120) * 60 * 1000; // Konversi menit ke milidetik
-    endTime = waktuMulaiUjian.getTime() + durasiUjian;
-    
-    showLoader(false);
-    
-    // Setup anti-cheat
-    startAntiCheat();
-    
-    // Setup auto-save
-    if (autoSaveInterval) clearInterval(autoSaveInterval);
-    autoSaveInterval = setInterval(saveAllAnswers, 30000); // Auto-save setiap 30 detik
-    
-    // Tampilkan exam interface
-    showExamInterface();
-    
-    // Load soal pertama
-    loadQuestion();
-    
-  } catch (error) {
-    showLoader(false);
-    showUserFriendlyError(error.message);
-    console.error('Load exam error:', error);
-    goMapel();
+  if (!pendingMapelId) {
+    showToast('Mapel tidak valid', 'error');
+    return;
   }
+  
+  initExamSession();
 }
 
-function showExamInterface() {
+async function initExamSession() {
   goView('view-exam');
   
   const e_mapel = document.getElementById('e_mapel');
   const e_user = document.getElementById('e_user');
+  const q_area = document.getElementById('q_area');
   
-  if (e_mapel && mapel) e_mapel.innerText = mapel.nama_mata_pelajaran;
+  if (e_mapel && mapel) e_mapel.innerText = mapel.nama_mata_pelajaran; 
   if (e_user && user) e_user.innerText = user.nama_peserta;
+  if (q_area) q_area.innerHTML = '';
   
-  updateTimerDisplay();
-  
-  if (timerInt) clearInterval(timerInt);
-  timerInt = setInterval(updateTimerDisplay, 1000);
-  
-  // Setup sidebar navigation
-  renderSidebar();
+  try {
+    const result = await apiRequest('/get-soal', 'POST', {
+      agenda_id: user.id_agenda,
+      peserta_id: user.id,
+      mapel_id: pendingMapelId
+    });
+    
+    if (!result.success) {
+      showCustomAlert('Tidak ada soal untuk mapel ini', 'Error', '❌'); 
+      goMapel(); 
+      return;
+    }
+    
+    // Simpan data ujian
+    mapel = result.mapel_detail;
+    questions = result.data_soal || [];
+    jawabanData = result;
+    waktuMulaiUjian = result.waktu_mulai;
+    durasiUjian = mapel.durasi_ujian || 0;
+    
+    // Parse jawaban sebelumnya
+    const jawabanArray = result.jawaban_sebelumnya.split('|');
+    answers = {};
+    questions.forEach((question, index) => {
+      answers[question.id] = jawabanArray[index] || '-';
+    });
+    
+    qIdx = 0; 
+    renderQuestion(0);
+    
+    // Hitung waktu selesai
+    const startTime = new Date(waktuMulaiUjian).getTime();
+    const durasiMs = (durasiUjian * 60 * 1000);
+    endTime = startTime + durasiMs;
+    
+    if (timerInt) clearInterval(timerInt); 
+    timerInt = setInterval(updateTimer, 1000);
+    startAntiCheat();
+  } catch (error) { 
+    showToast('Error memuat soal', 'error'); 
+    console.error('Question load error:', error); 
+  }
 }
 
-function updateTimerDisplay() {
-  const timerElement = document.getElementById('timer');
-  if (!timerElement) return;
+function updateTimer() {
+  const timeLeft = endTime - Date.now(); 
   
-  const now = Date.now();
-  let timeLeft = endTime - now;
-  
-  if (timeLeft <= 0) {
-    timeLeft = 0;
-    if (timerInt) {
-      clearInterval(timerInt);
-      timerInt = null;
-    }
-    finishExam(true); // Auto submit when time's up
-    return;
+  if (timeLeft <= 0) { 
+    finishExam(true); 
+    return; 
   }
   
   const hours = Math.floor(timeLeft / 3600000);
   const minutes = Math.floor((timeLeft % 3600000) / 60000);
   const seconds = Math.floor((timeLeft % 60000) / 1000);
   
-  // Format warna berdasarkan sisa waktu
-  let timerClass = '';
-  if (timeLeft <= 300000) { // 5 menit terakhir
-    timerClass = 'style="color:#ef4444; animation: pulse 1s infinite;"';
-  } else if (timeLeft <= 900000) { // 15 menit terakhir
-    timerClass = 'style="color:#f59e0b"';
-  }
-  
-  timerElement.innerHTML = `<span ${timerClass}>${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}</span>`;
-}
-
-/* QUESTION RENDERING */
-async function loadQuestion() {
-  if (questions.length === 0) return;
-  
-  const question = questions[qIdx];
-  if (!question) {
-    showToast('Soal tidak ditemukan', 'error');
-    return;
-  }
-  
-  const q_area = document.getElementById('q_area');
-  if (!q_area) return;
-  
-  const prevBtn = document.getElementById('btn-prev');
-  const nextBtn = document.getElementById('btn-next');
-  const chkRagu = document.getElementById('chk-ragu');
-  
-  // Update navigation buttons
-  if (prevBtn) prevBtn.disabled = qIdx === 0;
-  if (nextBtn) nextBtn.innerText = qIdx === questions.length - 1 ? 'Selesai' : '→';
-  
-  // Update ragu checkbox
-  if (chkRagu) {
-    chkRagu.checked = ragu[qIdx] || false;
-  }
-  
-  // Render question based on type
-  let questionHTML = '';
-  const qNumber = qIdx + 1;
-  
-  switch (question.tipe_soal) {
-    case 'Pilihan Ganda':
-    case 'Pilihan Ganda Kompleks':
-      questionHTML = await renderMultipleChoice(question, qNumber);
-      break;
-    case 'Benar/Salah':
-    case 'Setuju/Tidak':
-      questionHTML = await renderTrueFalse(question, qNumber);
-      break;
-    case 'Uraian':
-      questionHTML = await renderEssay(question, qNumber);
-      break;
-    case 'Pejodohan':
-      questionHTML = await renderMatching(question, qNumber);
-      break;
-    default:
-      questionHTML = await renderDefault(question, qNumber);
-  }
-  
-  q_area.innerHTML = questionHTML;
-  
-  // Setup event listeners based on question type
-  switch (question.tipe_soal) {
-    case 'Pilihan Ganda':
-      setupSingleChoice();
-      break;
-    case 'Pilihan Ganda Kompleks':
-      setupMultipleChoice();
-      break;
-    case 'Benar/Salah':
-    case 'Setuju/Tidak':
-      setupTrueFalse();
-      break;
-    case 'Pejodohan':
-      setupMatching();
-      break;
-    case 'Uraian':
-      setupEssay();
-      break;
-  }
-  
-  // Update sidebar active state
-  updateSidebarActive();
-  updateScrollButtons();
-  
-  // Smooth scroll to top
-  q_area.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-async function renderMultipleChoice(question, qNumber) {
-  const currentAnswer = answers[qIdx];
-  const options = ['A', 'B', 'C', 'D', 'E'].slice(0, question.jumlah_pilihan || 5);
-  
-  // Check for question images
-  let imageHTML = '';
-  const imageUrls = await getQuestionImages(question);
-  
-  if (imageUrls.length > 0) {
-    imageHTML = imageUrls.map((url, idx) => `
-      <div class="q-img-container">
-        <img src="${url}" alt="Gambar soal ${qNumber}" class="q-img" 
-             onload="this.style.opacity='1'" style="opacity:0; transition:opacity 0.3s;">
-        <div class="q-img-controls">
-          <button class="q-img-btn" onclick="openZoomModal('${url}', 'Gambar soal ${qNumber}')">+</button>
-          <button class="q-img-btn" onclick="downloadImage('${url}', 'soal-${qNumber}-${idx+1}')">↓</button>
-        </div>
-      </div>
-    `).join('');
-  }
-  
-  // Determine if multiple selection
-  const isMultiple = question.tipe_soal.includes('Kompleks');
-  
-  const optionsHTML = options.map(option => {
-    const optionText = question[`opsi_${option.toLowerCase()}`] || '';
-    const isSelected = isMultiple 
-      ? (currentAnswer && currentAnswer.includes(option))
-      : (currentAnswer === option);
+  const timerElement = document.getElementById('timer');
+  if (timerElement) {
+    timerElement.innerText = `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
     
-    return `
-      <label class="opt-label" data-option="${option}">
-        <input type="${isMultiple ? 'checkbox' : 'radio'}" name="answer" 
-               value="${option}" ${isSelected ? 'checked' : ''}>
-        <div class="opt-key">${option}.</div>
-        <div class="opt-text">${optionText || '(Tidak ada teks)'}</div>
-      </label>
-    `;
-  }).join('');
+    if (timeLeft <= 300000) {
+      timerElement.style.color = '#dc2626';
+      timerElement.style.animation = 'pulse 1s infinite';
+    } else if (timeLeft <= 600000) {
+      timerElement.style.color = '#f59e0b';
+    }
+  }
+}
+
+function renderQuestion(idx) {
+  if (idx < 0 || idx >= questions.length) return;
   
-  return `
+  qIdx = idx; 
+  const question = questions[idx]; 
+  const answer = answers[question.id];
+  const area = document.getElementById('q_area');
+  
+  if (!area) return;
+  
+  let html = `
     <div class="q-card">
-      <div class="save-status" id="save-status">
-        <div class="pulse-dot"></div> Tersimpan
-      </div>
-      <div class="q-number">Soal ${qNumber}/${questions.length}</div>
-      <div class="q-text">${question.soal_text || question.soal || '(Tidak ada soal)'}</div>
-      ${imageHTML}
-      <div class="options-container" id="options-container">
-        ${optionsHTML}
-      </div>
-    </div>
+      <div class="save-status" id="save-st"><div class="pulse-dot"></div>Menyimpan...</div>
+      <div style="font-weight:700;color:var(--primary);margin-bottom:10px;">No. ${idx + 1}</div>
   `;
-}
+  
+  if (question.gambar_url) {
+    html += `<img src="${question.gambar_url}" class="q-img" referrerpolicy="no-referrer" onerror="this.style.display='none'" alt="Gambar soal ${idx + 1}">`;
+  }
+  
+  html += `<div style="margin-bottom:20px;font-size:16px;line-height:1.6;">${question.pertanyaan.replace(/\n/g,'<br>')}</div>`;
 
-async function renderTrueFalse(question, qNumber) {
-  const currentAnswer = answers[qIdx] || '';
-  const answerArray = currentAnswer ? currentAnswer.split(',') : [];
-  
-  // Count number of statements
-  const statementCount = Object.keys(question).filter(key => key.startsWith('pernyataan_')).length;
-  
-  let statementsHTML = '';
-  for (let i = 1; i <= statementCount; i++) {
-    const statement = question[`pernyataan_${i}`];
-    const isTrue = answerArray[i-1] === 'true' || answerArray[i-1] === '1';
+  if (question.type_soal === 'Pilihan Ganda Kompleks') {
+    const answerArray = answer && answer !== '-' ? answer.split(',') : [];
+    ['a','b','c','d','e'].forEach(option => { 
+      if (question['pilihan_' + option]) {
+        html += `
+          <label class="opt-label">
+            <input type="checkbox" value="${option.toUpperCase()}" ${answerArray.includes(option.toUpperCase())?'checked':''} onchange="saveComplexAnswer('${question.id}')" class="chk-c">
+            <span class="opt-key">${option.toUpperCase()}.</span>
+            <span>${question['pilihan_' + option]}</span>
+          </label>
+        `; 
+      }
+    });
+  } else if (question.type_soal.includes('Benar/Salah') || question.type_soal.includes('Setuju/Tidak')) {
+    const isBenarSalah = question.type_soal.includes('Benar');
+    const option1 = isBenarSalah ? 'B' : 'S';
+    const option2 = isBenarSalah ? 'S' : 'T';
+    const answerArray = answer && answer !== '-' ? answer.split(',') : [];
     
-    if (statement) {
-      statementsHTML += `
-        <div class="opt-label" style="flex-direction:column; align-items:flex-start;">
-          <div style="margin-bottom:8px; font-weight:600;">Pernyataan ${i}:</div>
-          <div style="margin-bottom:10px; padding-left:15px;">${statement}</div>
-          <div style="display:flex; gap:15px;">
-            <label class="radio-label">
-              <input type="radio" name="stmt_${i}" value="true" ${isTrue ? 'checked' : ''}>
-              <span>Benar/Setuju</span>
-            </label>
-            <label class="radio-label">
-              <input type="radio" name="stmt_${i}" value="false" ${!isTrue && answerArray[i-1] !== undefined ? 'checked' : ''}>
-              <span>Salah/Tidak Setuju</span>
-            </label>
-            <label class="radio-label">
-              <input type="radio" name="stmt_${i}" value="" ${answerArray[i-1] === undefined ? 'checked' : ''}>
-              <span>Tidak Menjawab</span>
-            </label>
-          </div>
+    html += `
+      <table class="table-custom">
+        <tr>
+          <th>Pernyataan</th>
+          <th>${isBenarSalah?'Benar':'Setuju'}</th>
+          <th>${isBenarSalah?'Salah':'Tidak'}</th>
+        </tr>
+    `;
+    
+    for (let i = 1; i <= 8; i++) { 
+      if (question['pernyataan_' + i]) { 
+        const currentAnswer = answerArray[i-1] || '';
+        html += `
+          <tr>
+            <td>${question['pernyataan_' + i]}</td>
+            <td align="center">
+              <input type="radio" name="r${i}" value="${option1}" ${currentAnswer===option1?'checked':''} onchange="saveTrueFalse('${question.id}')">
+            </td>
+            <td align="center">
+              <input type="radio" name="r${i}" value="${option2}" ${currentAnswer===option2?'checked':''} onchange="saveTrueFalse('${question.id}')">
+            </td>
+          </tr>
+        `;
+      }
+    } 
+    
+    html += `</table>`;
+  } else if (question.type_soal.includes('Penjodohan')) {
+  console.log('DEBUG - Tipe soal penjodohan terdeteksi:', question.type_soal);
+  console.log('DEBUG - Struktur question untuk penjodohan:', question);
+  
+  matchPairs = {}; 
+  if (answer && answer !== '-') {
+    console.log('DEBUG - Jawaban sebelumnya:', answer);
+    answer.split(',').forEach(pair => { 
+      if (pair.length >= 2) {
+        matchPairs[pair.slice(0,-1)] = pair.slice(-1); 
+      }
+    });
+  }
+  
+  html += `
+    <div class="match-container">
+      <canvas id="match-canvas"></canvas>
+      <div class="match-wrapper">
+        <div class="match-col left">
+  `;
+  
+  // KIRI - menggunakan pernyataan_kiri_1 sampai pernyataan_kiri_8
+  let leftItemsFound = false;
+  let leftItemCount = 0;
+  for (let i = 1; i <= 8; i++) { 
+    const leftValue = question['pernyataan_kiri_' + i];
+    if (leftValue && leftValue.trim() !== '') {
+      leftItemsFound = true;
+      leftItemCount++;
+      console.log(`DEBUG - Left item ${i}: pernyataan_kiri_${i} = ${leftValue}`);
+      html += `
+        <div class="match-item" id="left-${i}" onclick="handleMatch('left','${i}')">
+          ${leftValue}
+          <div class="match-point"></div>
         </div>
       `;
     }
   }
   
-  return `
-    <div class="q-card">
-      <div class="save-status" id="save-status">
-        <div class="pulse-dot"></div> Tersimpan
-      </div>
-      <div class="q-number">Soal ${qNumber}/${questions.length}</div>
-      <div class="q-text">${question.soal_text || question.soal || '(Tidak ada soal)'}</div>
-      <div class="options-container">
-        ${statementsHTML}
-      </div>
-    </div>
-  `;
-}
-
-async function renderEssay(question, qNumber) {
-  const currentAnswer = answers[qIdx] || '';
-  
-  return `
-    <div class="q-card">
-      <div class="save-status" id="save-status">
-        <div class="pulse-dot"></div> Tersimpan
-      </div>
-      <div class="q-number">Soal ${qNumber}/${questions.length}</div>
-      <div class="q-text">${question.soal_text || question.soal || '(Tidak ada soal)'}</div>
-      <div class="form-group">
-        <label class="form-label">Jawaban Anda:</label>
-        <textarea id="essay-answer" class="form-control" placeholder="Ketik jawaban Anda di sini..." 
-                  rows="8" oninput="debounceSave(${qIdx}, this.value)">${currentAnswer}</textarea>
-      </div>
-      <div style="font-size:12px; color:var(--text-muted); margin-top:10px;">
-        <strong>Tips:</strong> Gunakan bahasa yang baik dan benar. Jawaban akan diperiksa oleh sistem atau guru.
-      </div>
-    </div>
-  `;
-}
-
-async function renderMatching(question, qNumber) {
-  const currentAnswer = answers[qIdx] || '';
-  const pairs = currentAnswer ? currentAnswer.split(',') : [];
-  
-  // Extract left and right items
-  const leftItems = [];
-  const rightItems = [];
-  
-  for (let i = 1; i <= 10; i++) {
-    const left = question[`kiri_${i}`];
-    const right = question[`kanan_${i}`];
-    
-    if (left) leftItems.push({ id: i, text: left });
-    if (right) rightItems.push({ id: i, text: right });
+  if (!leftItemsFound) {
+    html += `<div style="color: #ef4444; padding: 10px; text-align: center;">Tidak ada data pernyataan kiri</div>`;
   }
   
-  // Create match pairs object
-  matchPairs = {};
-  pairs.forEach(pair => {
-    if (pair.length >= 2) {
-      const left = pair.slice(0, -1);
-      const right = pair.slice(-1);
-      matchPairs[left] = right;
+  html += `
+        </div>
+        <div class="match-col right">
+  `;
+  
+  // KANAN - menggunakan pernyataan_kanan_1 sampai pernyataan_kanan_8
+  let rightItemsFound = false;
+  let rightItemCount = 0;
+  
+  for (let i = 1; i <= 8; i++) { 
+    const rightValue = question['pernyataan_kanan_' + i];
+    if (rightValue && rightValue.trim() !== '') {
+      rightItemsFound = true;
+      rightItemCount++;
+      const rightId = String.fromCharCode(64 + i); // A, B, C, ...
+      console.log(`DEBUG - Right item ${rightId}: pernyataan_kanan_${i} = ${rightValue}`);
+      html += `
+        <div class="match-item" id="right-${rightId}" onclick="handleMatch('right','${rightId}')">
+          <div class="match-point"></div>
+          ${rightValue}
+        </div>
+      `;
     }
-  });
+  }
   
-  const leftHTML = leftItems.map(item => {
-    const isConnected = matchPairs[item.id] !== undefined;
-    const connectedClass = isConnected ? 'connected' : '';
-    const selectedClass = matchSelection && matchSelection.side === 'left' && matchSelection.id === item.id ? 'selected' : '';
-    
-    return `
-      <div class="match-item ${connectedClass} ${selectedClass}" data-id="${item.id}" data-side="left">
-        <div class="match-point"></div>
-        <div style="flex:1;">${item.text}</div>
-        <div style="font-weight:700; color:var(--primary); margin-left:10px;">${item.id}</div>
-      </div>
-    `;
-  }).join('');
+  if (!rightItemsFound) {
+    html += `<div style="color: #ef4444; padding: 10px; text-align: center;">Tidak ada data pernyataan kanan</div>`;
+  }
   
-  const rightHTML = rightItems.map(item => {
-    const connectedLeft = Object.keys(matchPairs).find(key => matchPairs[key] === item.id.toString());
-    const isConnected = connectedLeft !== undefined;
-    const connectedClass = isConnected ? 'connected' : '';
-    const selectedClass = matchSelection && matchSelection.side === 'right' && matchSelection.id === item.id ? 'selected' : '';
-    
-    return `
-      <div class="match-item ${connectedClass} ${selectedClass}" data-id="${item.id}" data-side="right">
-        <div style="font-weight:700; color:var(--primary); margin-right:10px;">${item.id}</div>
-        <div style="flex:1;">${item.text}</div>
-        <div class="match-point"></div>
-      </div>
-    `;
-  }).join('');
+  console.log(`DEBUG - Jumlah item kiri: ${leftItemCount}, Jumlah item kanan: ${rightItemCount}`);
   
-  return `
-    <div class="q-card">
-      <div class="save-status" id="save-status">
-        <div class="pulse-dot"></div> Tersimpan
-      </div>
-      <div class="q-number">Soal ${qNumber}/${questions.length}</div>
-      <div class="q-text">${question.soal_text || question.soal || '(Tidak ada soal)'}</div>
-      <div class="match-container">
-        <canvas id="match-canvas"></canvas>
-        <div class="match-wrapper">
-          <div class="match-col left">
-            ${leftHTML}
-          </div>
-          <div class="match-col right">
-            ${rightHTML}
-          </div>
+  html += `
         </div>
       </div>
-      <div style="margin-top:20px; padding:15px; background:#f8fafc; border-radius:8px; font-size:13px;">
-        <strong>Petunjuk:</strong> Klik item di kiri, lalu klik item di kanan untuk membuat pasangan. Klik lagi untuk membatalkan.
-      </div>
+      <button class="btn btn-outline" onclick="resetMatch('${question.id}')" style="margin-top:15px; width:auto;">
+        Reset Pejodohan
+      </button>
     </div>
   `;
-}
-
-async function renderDefault(question, qNumber) {
-  const currentAnswer = answers[qIdx] || '';
   
-  return `
-    <div class="q-card">
-      <div class="save-status" id="save-status">
-        <div class="pulse-dot"></div> Tersimpan
-      </div>
-      <div class="q-number">Soal ${qNumber}/${questions.length}</div>
-      <div class="q-text">${question.soal_text || question.soal || '(Tidak ada soal)'}</div>
-      <div class="form-group">
-        <label class="form-label">Jawaban:</label>
-        <input type="text" id="default-answer" class="form-control" 
-               value="${currentAnswer}" oninput="debounceSave(${qIdx}, this.value)" 
-               placeholder="Masukkan jawaban Anda...">
-      </div>
-    </div>
-  `;
-}
-
-/* EVENT HANDLERS */
-function setupSingleChoice() {
-  const options = document.querySelectorAll('#options-container input[type="radio"]');
-  options.forEach(radio => {
-    radio.addEventListener('change', function() {
-      saveAnswer(qIdx, this.value);
-    });
-  });
-}
-
-function setupMultipleChoice() {
-  const options = document.querySelectorAll('#options-container input[type="checkbox"]');
-  options.forEach(checkbox => {
-    checkbox.addEventListener('change', function() {
-      const checkedOptions = Array.from(document.querySelectorAll('#options-container input[type="checkbox"]:checked'))
-        .map(cb => cb.value)
-        .sort()
-        .join('');
-      
-      saveAnswer(qIdx, checkedOptions || '');
-    });
-  });
-}
-
-function setupTrueFalse() {
-  const radioGroups = {};
-  
-  // Group radios by statement
-  document.querySelectorAll('input[type="radio"]').forEach(radio => {
-    const name = radio.name;
-    if (!radioGroups[name]) radioGroups[name] = [];
-    radioGroups[name].push(radio);
-    
-    radio.addEventListener('change', function() {
-      const statementNum = this.name.split('_')[1];
-      const answersArray = [];
-      
-      // Collect all statement answers
-      for (let i = 1; ; i++) {
-        const radios = document.querySelectorAll(`input[name="stmt_${i}"]:checked`);
-        if (radios.length === 0) break;
-        
-        const value = radios[0].value;
-        answersArray.push(value === 'true' ? '1' : (value === 'false' ? '0' : ''));
+  setTimeout(drawMatchLines, 100);
+} else if (question.type_soal.includes('Pilihan Ganda')) {
+    ['a','b','c','d','e'].forEach(option => { 
+      if (question['pilihan_' + option]) {
+        html += `
+          <label class="opt-label">
+            <input type="radio" name="ans" value="${option.toUpperCase()}" ${answer===option.toUpperCase()?'checked':''} onchange="saveSingleAnswer('${question.id}','${option.toUpperCase()}')">
+            <span class="opt-key">${option.toUpperCase()}.</span>
+            <span>${question['pilihan_' + option]}</span>
+          </label>
+        `; 
       }
-      
-      saveAnswer(qIdx, answersArray.join(','));
     });
-  });
-}
-
-function setupEssay() {
-  const textarea = document.getElementById('essay-answer');
-  if (textarea) {
-    textarea.addEventListener('input', function() {
-      debounceSave(qIdx, this.value);
-    });
+  } else {
+    html += `
+      <textarea class="form-control" style="height:100px;" onblur="saveSingleAnswer('${question.id}',this.value)" placeholder="Ketik jawaban Anda di sini...">
+        ${answer && answer !== '-' ? answer : ''}
+      </textarea>
+    `;
+  }
+  
+  html += `</div>`;
+  area.innerHTML = html;
+  
+  renderNavigation();
+  
+  const raguCheckbox = document.getElementById('chk-ragu');
+  if (raguCheckbox) {
+    raguCheckbox.checked = (ragu[qIdx] === true);
+  }
+  
+  const prevButton = document.getElementById('btn-prev');
+  if (prevButton) {
+    prevButton.disabled = idx === 0;
+  }
+  
+  const nextButton = document.getElementById('btn-next');
+  if (nextButton) {
+    nextButton.innerText = idx === questions.length - 1 ? 'SELESAI' : 'LANJUT';
   }
 }
 
-function setupMatching() {
-  // Reset selection
-  matchSelection = null;
+/* SAVING FUNCTIONS */
+async function saveSingleAnswer(questionId, value) {
+  const saveStatus = document.getElementById('save-st');
+  if (saveStatus) {
+    saveStatus.classList.add('show');
+  }
   
-  // Add click handlers to match items
-  document.querySelectorAll('.match-item').forEach(item => {
-    item.addEventListener('click', handleMatchClick);
-  });
+  answers[questionId] = value;
   
-  // Draw initial connections
-  drawConnections();
+  try {
+    // Format jawaban untuk dikirim ke server
+    const jawabanArray = questions.map(q => answers[q.id] || '-');
+    const jawabanString = jawabanArray.join('|');
+    
+    await apiRequest('/save-jawaban', 'POST', {
+      pid: user.id,
+      aid: user.id_agenda,
+      mid: mapel.id,
+      jwb: jawabanString
+    });
+    
+    setTimeout(() => { 
+      if (saveStatus) {
+        saveStatus.classList.remove('show');
+      }
+    }, 500);
+  } catch (error) {
+    if (saveStatus) {
+      saveStatus.classList.remove('show');
+    }
+    showToast('Gagal menyimpan', 'error');
+    console.error('Save error:', error);
+  }
+  
+  renderNavigation();
 }
 
-function handleMatchClick(event) {
-  const item = event.currentTarget;
-  const itemId = item.dataset.id;
-  const itemSide = item.dataset.side;
+function saveComplexAnswer(questionId) {
+  const checkboxes = document.querySelectorAll('.chk-c:checked');
+  const value = Array.from(checkboxes).map(e => e.value).join(',');
+  saveSingleAnswer(questionId, value);
+}
+
+function saveTrueFalse(questionId) {
+  let answersArray = [];
   
+  for (let i = 1; i <= 8; i++) {
+    const radios = document.getElementsByName('r' + i);
+    if (radios.length > 0) {
+      const checkedRadio = Array.from(radios).find(radio => radio.checked);
+      answersArray.push(checkedRadio ? checkedRadio.value : '');
+    }
+  }
+  
+  saveSingleAnswer(questionId, answersArray.join(','));
+}
+
+function handleMatch(side, id) {
   if (!matchSelection) {
-    // First selection
-    matchSelection = { id: itemId, side: itemSide };
-    item.classList.add('selected');
-  } else {
-    // Second selection
-    if (matchSelection.side !== itemSide) {
-      // Valid pair - connect them
-      const leftId = matchSelection.side === 'left' ? matchSelection.id : itemId;
-      const rightId = matchSelection.side === 'right' ? matchSelection.id : itemId;
-      
-      // Check if this left is already connected
-      if (matchPairs[leftId]) {
-        // Remove existing connection
-        delete matchPairs[leftId];
-      }
-      
-      // Create new connection
-      matchPairs[leftId] = rightId;
-      
-      // Save answer
-      const answerString = Object.entries(matchPairs)
-        .map(([left, right]) => left + right)
-        .join(',');
-      
-      saveAnswer(qIdx, answerString);
-      
-      // Redraw connections
-      drawConnections();
+    matchSelection = {side, id};
+    document.getElementById(`${side}-${id}`).classList.add('selected');
+  } else if (matchSelection.side !== side) {
+    if (side === 'left') {
+      matchPairs[id] = matchSelection.id;
+    } else {
+      matchPairs[matchSelection.id] = id;
     }
     
-    // Reset selection
-    document.querySelectorAll('.match-item').forEach(el => el.classList.remove('selected'));
     matchSelection = null;
+    saveMatchAnswer(questions[qIdx].id);
+    drawMatchLines();
+  } else {
+    document.getElementById(`${matchSelection.side}-${matchSelection.id}`).classList.remove('selected');
+    matchSelection = {side, id};
+    document.getElementById(`${side}-${id}`).classList.add('selected');
   }
 }
 
-function drawConnections() {
+function drawMatchLines() {
   const canvas = document.getElementById('match-canvas');
   if (!canvas) return;
   
   const ctx = canvas.getContext('2d');
-  const container = canvas.parentElement;
+  const container = document.querySelector('.match-container');
   
-  // Set canvas size
+  if (!container) return;
+  
   canvas.width = container.offsetWidth;
   canvas.height = container.offsetHeight;
-  
-  // Clear canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   
-  // Draw connections
-  Object.entries(matchPairs).forEach(([leftId, rightId]) => {
-    const leftItem = document.querySelector(`.match-item[data-side="left"][data-id="${leftId}"]`);
-    const rightItem = document.querySelector(`.match-item[data-side="right"][data-id="${rightId}"]`);
+  document.querySelectorAll('.match-item').forEach(item => {
+    item.classList.remove('connected');
+  });
+  
+  Object.keys(matchPairs).forEach(leftId => {
+    const leftElement = document.getElementById('left-' + leftId);
+    const rightElement = document.getElementById('right-' + matchPairs[leftId]);
     
-    if (leftItem && rightItem) {
-      const leftRect = leftItem.getBoundingClientRect();
-      const rightRect = rightItem.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
+    if (leftElement && rightElement) {
+      leftElement.classList.add('connected');
+      rightElement.classList.add('connected');
       
-      const leftX = leftRect.right - containerRect.left;
-      const leftY = leftRect.top + leftRect.height / 2 - containerRect.top;
-      const rightX = rightRect.left - containerRect.left;
-      const rightY = rightRect.top + rightRect.height / 2 - containerRect.top;
+      const leftPoint = leftElement.querySelector('.match-point');
+      const rightPoint = rightElement.querySelector('.match-point');
       
-      // Draw line
-      ctx.beginPath();
-      ctx.moveTo(leftX, leftY);
-      ctx.bezierCurveTo(
-        leftX + 50, leftY,
-        rightX - 50, rightY,
-        rightX, rightY
-      );
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      
-      // Draw arrowhead
-      const angle = Math.atan2(rightY - leftY, rightX - leftX);
-      ctx.beginPath();
-      ctx.moveTo(rightX, rightY);
-      ctx.lineTo(
-        rightX - 10 * Math.cos(angle - Math.PI / 6),
-        rightY - 10 * Math.sin(angle - Math.PI / 6)
-      );
-      ctx.lineTo(
-        rightX - 10 * Math.cos(angle + Math.PI / 6),
-        rightY - 10 * Math.sin(angle + Math.PI / 6)
-      );
-      ctx.closePath();
-      ctx.fillStyle = '#10b981';
-      ctx.fill();
+      if (leftPoint && rightPoint) {
+        const leftRect = leftPoint.getBoundingClientRect();
+        const rightRect = rightPoint.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        
+        ctx.beginPath();
+        ctx.moveTo(
+          leftRect.left - containerRect.left + 7,
+          leftRect.top - containerRect.top + 7
+        );
+        ctx.lineTo(
+          rightRect.left - containerRect.left + 7,
+          rightRect.top - containerRect.top + 7
+        );
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
     }
   });
 }
 
-/* SAVE FUNCTIONS */
-async function saveAnswer(questionIndex, answer) {
-  if (!questions[questionIndex]) return;
-  
-  // Update answers object
-  answers[questionIndex] = answer;
-  
-  // Update sidebar immediately
-  updateSidebarItem(questionIndex);
-  
-  // Show save indicator
-  const saveStatus = document.getElementById('save-status');
-  if (saveStatus) {
-    saveStatus.classList.add('show');
-    setTimeout(() => saveStatus.classList.remove('show'), 2000);
-  }
-  
-  // Save to server in background
-  saveToServer();
+function resetMatch(questionId) {
+  matchPairs = {};
+  saveMatchAnswer(questionId);
+  drawMatchLines();
 }
 
-async function saveToServer() {
-  if (!user || !mapel) return;
-  
-  try {
-    await apiRequest('/save-jawaban', 'POST', {
-      agenda_id: user.id_agenda,
-      peserta_id: user.id,
-      mapel_id: mapel.id,
-      jawaban: JSON.stringify(answers),
-      tandaragu: JSON.stringify(ragu),
-      waktu_mulai: waktuMulaiUjian.toISOString()
-    }, { showSpinner: false, errorToast: false });
-  } catch (error) {
-    console.error('Auto-save error:', error);
-    // Don't show toast for auto-save errors to avoid disturbing user
-  }
+function saveMatchAnswer(questionId) {
+  const value = Object.keys(matchPairs).map(key => key + matchPairs[key]).join(',');
+  saveSingleAnswer(questionId, value);
 }
 
-async function saveAllAnswers() {
-  if (Object.keys(answers).length > 0) {
-    await saveToServer();
-  }
-}
-
-function toggleRagu() {
-  const chkRagu = document.getElementById('chk-ragu');
-  if (!chkRagu) return;
-  
-  ragu[qIdx] = chkRagu.checked;
-  updateSidebarItem(qIdx);
-  saveToServer();
-}
-
-/* NAVIGATION */
-function nav(direction) {
+function navigateQuestion(direction) {
   const newIndex = qIdx + direction;
-  
-  if (newIndex >= 0 && newIndex < questions.length) {
-    qIdx = newIndex;
-    loadQuestion();
-  } else if (newIndex === questions.length) {
+  if (newIndex >= questions.length) {
     finishCheck();
+  } else {
+    renderQuestion(newIndex);
   }
+}
+
+function renderNavigation() {
+  const grid = document.getElementById('nav_grid');
+  if (!grid) return;
+  
+  grid.innerHTML = '';
+  
+  questions.forEach((question, index) => {
+    const navItem = document.createElement('div');
+    navItem.className = `nav-item ${index === qIdx ? 'active' : ''} ${answers[question.id] && answers[question.id] !== '-' ? 'done' : ''} ${ragu[index] ? 'ragu' : ''}`;
+    navItem.innerText = index + 1;
+    navItem.onclick = () => renderQuestion(index);
+    
+    if (ragu[index]) {
+      navItem.title = `Soal No. ${index + 1} (Ragu)`;
+    } else if (answers[question.id] && answers[question.id] !== '-') {
+      navItem.title = `Soal No. ${index + 1} (Terjawab)`;
+    } else {
+      navItem.title = `Soal No. ${index + 1} (Belum terjawab)`;
+    }
+    
+    grid.appendChild(navItem);
+  });
 }
 
 function toggleSidebar() {
@@ -4674,533 +4502,511 @@ function toggleSidebar() {
   
   if (sidebar) {
     sidebar.classList.toggle('open');
-    if (overlay) overlay.classList.toggle('show');
+  }
+  
+  if (overlay) {
+    overlay.classList.toggle('show');
   }
 }
 
-function renderSidebar() {
-  const navGrid = document.getElementById('nav_grid');
-  if (!navGrid) return;
-  
-  navGrid.innerHTML = '';
-  
-  questions.forEach((_, index) => {
-    const isAnswered = answers[index] !== undefined && answers[index] !== '';
-    const isRagu = ragu[index];
-    
-    let className = 'nav-item';
-    if (index === qIdx) className += ' active';
-    if (isAnswered) className += ' done';
-    if (isRagu) className += ' ragu';
-    
-    navGrid.innerHTML += `
-      <div class="${className}" onclick="jumpToQuestion(${index})">
-        ${index + 1}
-      </div>
-    `;
-  });
-}
-
-function updateSidebarActive() {
-  document.querySelectorAll('.nav-item').forEach((item, index) => {
-    item.classList.toggle('active', index === qIdx);
-  });
-}
-
-function updateSidebarItem(index) {
-  const item = document.querySelector(`.nav-item:nth-child(${index + 1})`);
-  if (!item) return;
-  
-  const isAnswered = answers[index] !== undefined && answers[index] !== '';
-  const isRagu = ragu[index];
-  
-  item.className = 'nav-item';
-  if (index === qIdx) item.classList.add('active');
-  if (isAnswered) item.classList.add('done');
-  if (isRagu) item.classList.add('ragu');
-}
-
-function jumpToQuestion(index) {
-  if (index >= 0 && index < questions.length) {
-    qIdx = index;
-    loadQuestion();
-    toggleSidebar();
+function toggleRagu() {
+  const raguCheckbox = document.getElementById('chk-ragu');
+  if (raguCheckbox) {
+    ragu[qIdx] = raguCheckbox.checked;
+    renderNavigation();
   }
 }
 
-/* FINISH EXAM */
+/* FINISH & ANTI CHEAT */
 function finishCheck() {
-  showCustomConfirm(
-    'Apakah Anda yakin ingin menyelesaikan ujian? Pastikan semua soal telah terjawab.',
-    finishExam
-  );
+  const unanswered = questions.filter(question => !answers[question.id] || answers[question.id] === '-').length;
+  let message = 'Yakin ingin menyelesaikan ujian mapel ini?';
+  
+  if (unanswered > 0) {
+    message += `\n\nAda ${unanswered} soal yang belum dijawab.`;
+  }
+  
+  showCustomConfirm(message, () => finishExam(false));
 }
 
-async function finishExam(isTimeout = false) {
-  showLoader(true, 'Menyimpan jawaban...');
+async function finishExam(isTimeout) {
+  showLoader(true, 'Mengirim jawaban...');
   
-  // Clear timers
+  stopAntiCheat();
+  
   if (timerInt) {
     clearInterval(timerInt);
     timerInt = null;
   }
   
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval);
-    autoSaveInterval = null;
-  }
-  
-  stopAntiCheat();
-  
   try {
-    // Final save
-    await apiRequest('/submit-jawaban', 'POST', {
-      agenda_id: user.id_agenda,
-      peserta_id: user.id,
-      mapel_id: mapel.id,
-      jawaban: JSON.stringify(answers),
-      tandaragu: JSON.stringify(ragu),
-      waktu_mulai: waktuMulaiUjian.toISOString(),
-      waktu_selesai: new Date().toISOString()
+    // Format jawaban akhir
+    const jawabanArray = questions.map(q => answers[q.id] || '-');
+    const jawabanString = jawabanArray.join('|');
+    
+    await apiRequest('/selesai-ujian', 'POST', {
+      pid: user.id,
+      aid: user.id_agenda,
+      mid: mapel.id,
+      jwb: jawabanString
     });
     
     showLoader(false);
     
     if (isTimeout) {
-      showCustomAlert(
-        'Waktu ujian telah habis! Jawaban Anda telah disimpan.',
-        'Waktu Habis',
-        '⏰'
-      );
+      showCustomAlert('Waktu habis! Jawaban telah dikirim.', 'Waktu Habis', '⏰');
     } else {
-      showToast('Jawaban berhasil disimpan!', 'success');
+      showCustomAlert('Jawaban Mapel Ini Berhasil Dikirim', 'Sukses', '✅');
     }
     
-    // Reset exam state
-    questions = [];
-    answers = {};
-    ragu = {};
-    
-    setTimeout(() => {
-      goMapel();
-    }, isTimeout ? 3000 : 1500);
-    
+    goMapel();
   } catch (error) {
     showLoader(false);
-    showUserFriendlyError(error.message);
+    showCustomAlert('Gagal mengirim jawaban', 'Error', '❌');
     console.error('Finish exam error:', error);
   }
 }
 
-/* IMAGE HANDLING */
-async function getQuestionImages(question) {
-  const imageUrls = [];
-  
-  // Check image fields
-  for (let i = 1; i <= 5; i++) {
-    const imgField = question[`image${i}`] || question[`gambar${i}`] || question[`image_${i}`];
-    if (imgField && imgField.trim()) {
-      imageUrls.push(imgField);
-    }
-  }
-  
-  // Also check base64 encoded images
-  const base64Pattern = /data:image\/[^;]+;base64,[^"]+/;
-  const questionText = question.soal_text || question.soal || '';
-  const base64Matches = questionText.match(base64Pattern);
-  
-  if (base64Matches) {
-    imageUrls.push(...base64Matches);
-  }
-  
-  return imageUrls;
-}
-
-function downloadImage(url, filename) {
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  showToast('Gambar berhasil diunduh', 'success');
-}
-
-/* ANTI-CHEAT SYSTEM */
 function startAntiCheat() {
-  // Focus/blur detection
-  window.addEventListener('blur', handleBlur);
-  window.addEventListener('focus', handleFocus);
-  
-  // Visibility change
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  
-  // Fullscreen change
-  document.addEventListener('fullscreenchange', handleFullscreenChange);
-  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-  
-  // Prevent context menu
-  document.addEventListener('contextmenu', preventContextMenu);
-  
-  // Prevent keyboard shortcuts
-  document.addEventListener('keydown', preventShortcuts);
-  
-  console.log('Anti-cheat system activated');
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("blur", handleBlur);
 }
 
 function stopAntiCheat() {
-  window.removeEventListener('blur', handleBlur);
-  window.removeEventListener('focus', handleFocus);
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
-  document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-  document.removeEventListener('contextmenu', preventContextMenu);
-  document.removeEventListener('keydown', preventShortcuts);
-  
-  if (violationTimer) {
-    clearInterval(violationTimer);
-    violationTimer = null;
-  }
-  
-  console.log('Anti-cheat system deactivated');
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  window.removeEventListener("blur", handleBlur);
 }
 
-function handleBlur() {
-  if (document.visibilityState === 'visible') {
-    showViolationModal();
+function handleVisibilityChange() { 
+  if (document.hidden) {
+    triggerViolation(); 
   }
 }
 
-function handleFocus() {
-  // Resume if violation modal is showing
-  const violationModal = document.getElementById('modal-violation');
-  if (violationModal && !violationModal.classList.contains('hidden')) {
-    resumeFromViolation();
-  }
+function handleBlur() { 
+  triggerViolation(); 
 }
 
-function handleVisibilityChange() {
-  if (document.visibilityState === 'hidden') {
-    showViolationModal();
-  }
-}
-
-function handleFullscreenChange() {
-  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    showViolationModal();
-  }
-}
-
-function preventContextMenu(e) {
-  e.preventDefault();
-  showToast('Menu klik kanan dinonaktifkan selama ujian', 'warning');
-  return false;
-}
-
-function preventShortcuts(e) {
-  // Block F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
-  if (
-    e.key === 'F12' ||
-    (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
-    (e.ctrlKey && e.key === 'u')
-  ) {
-    e.preventDefault();
-    showToast('Shortcut ini dinonaktifkan selama ujian', 'warning');
-    return false;
-  }
-}
-
-function showViolationModal() {
+function triggerViolation() {
   const violationModal = document.getElementById('modal-violation');
   if (!violationModal || !violationModal.classList.contains('hidden')) return;
   
-  cheatCount = 30;
   violationModal.classList.remove('hidden');
+  cheatCount = 30;
   
-  // Update timer display
-  const cheatTimer = document.getElementById('cheat-timer');
-  if (cheatTimer) cheatTimer.innerText = cheatCount;
+  const timerElement = document.getElementById('cheat-timer');
+  if (timerElement) {
+    timerElement.innerText = cheatCount;
+  }
   
-  // Start countdown
-  if (violationTimer) clearInterval(violationTimer);
-  
-  violationTimer = setInterval(() => {
-    cheatCount--;
-    if (cheatTimer) cheatTimer.innerText = cheatCount;
-    
-    if (cheatCount <= 0) {
-      clearInterval(violationTimer);
-      resumeFromViolation();
-    }
-  }, 1000);
-  
-  // Force focus to modal
-  const resumeBtn = document.getElementById('btn-cheat-resume');
-  if (resumeBtn) resumeBtn.focus();
-}
-
-function resumeFromViolation() {
-  const violationModal = document.getElementById('modal-violation');
-  if (violationModal) {
-    violationModal.classList.add('hidden');
+  const resumeButton = document.getElementById('btn-cheat-resume');
+  if (resumeButton) {
+    resumeButton.innerText = "Lanjutkan";
+    resumeButton.className = "btn btn-primary";
+    resumeButton.onclick = resumeFromViolation;
   }
   
   if (violationTimer) {
     clearInterval(violationTimer);
-    violationTimer = null;
   }
   
-  showToast('Anda dapat melanjutkan ujian', 'warning');
+  violationTimer = setInterval(() => {
+    cheatCount--;
+    
+    if (timerElement) {
+      timerElement.innerText = cheatCount;
+    }
+    
+    if (cheatCount <= 0) {
+      clearInterval(violationTimer);
+      
+      if (resumeButton) {
+        resumeButton.innerText = "WAKTU HABIS - KIRIM";
+        resumeButton.className = "btn btn-danger";
+        resumeButton.onclick = () => { 
+          if (violationModal) {
+            violationModal.classList.add('hidden');
+          }
+          finishExam(true); 
+        };
+      }
+    }
+  }, 1000);
 }
 
-/* HISTORY VIEW */
-async function viewHistory() {
-  goView('view-history');
+function resumeFromViolation() {
+  if (cheatCount > 0) {
+    clearInterval(violationTimer);
+    const violationModal = document.getElementById('modal-violation');
+    if (violationModal) {
+      violationModal.classList.add('hidden');
+    }
+  }
+}
+
+/* HISTORY */
+function viewHistory() { 
+  goView('view-history'); 
+  loadHistory(); 
+}
+
+async function loadHistory() {
+  const container = document.getElementById('history-container');
+  if (!container) return;
   
-  const historyContainer = document.getElementById('history-container');
-  if (!historyContainer) return;
+  container.innerHTML = '<div style="text-align:center; padding:40px;">Memuat history...</div>';
   
-  historyContainer.innerHTML = '<div style="text-align:center; padding:20px;">Loading...</div>';
+  if (!user || !agenda) {
+    container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Data tidak ditemukan</div>';
+    return;
+  }
   
   try {
-    const result = await apiRequest(`/history?peserta_id=${user.id}&agenda_id=${user.id_agenda}`);
+    const result = await apiRequest(`/mapel?agenda_id=${user.id_agenda}&peserta_id=${user.id}`);
     
-    if (result.success && result.data && result.data.length > 0) {
-      let historyHTML = '';
+    if (result.success) {
+      const mapelList = result.data || [];
       
-      result.data.forEach(item => {
-        const submittedAt = item.waktu_selesai ? new Date(item.waktu_selesai).toLocaleString('id-ID') : 'Belum selesai';
-        const score = item.nilai_akhir !== null ? item.nilai_akhir : '-';
-        const status = item.status_kerjakan === 'Selesai' ? 
-          `<span class="status-badge status-badge-ready">Selesai</span>` : 
-          `<span class="status-badge status-badge-draft">Dalam Proses</span>`;
-        
-        historyHTML += `
-          <div class="history-card" onclick="viewHistoryDetail('${item.mapel_id}')">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <h4 style="margin:0;">${item.nama_mata_pelajaran}</h4>
-              ${status}
+      let html = '';
+      let mapelCount = 0;
+      
+      mapelList.forEach(mapelData => {
+        if (mapelData.status_kerjakan === 'Selesai') {
+          mapelCount++;
+          
+          html += `
+            <div class="history-card" onclick="viewDetailJawaban('${mapelData.id}')">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-weight:700; font-size:16px; color:var(--text-main);">${mapelData.nama_mata_pelajaran}</div>
+                  <div style="font-size:13px; color:var(--text-muted); margin-top:5px;">
+                    📝 ${mapelData.jumlah_soal || 0} Soal • 
+                    ⏰ ${mapelData.durasi_ujian || 0} Menit
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="background:var(--success); color:white; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:700;">
+                    SELESAI
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style="display:flex; gap:15px; font-size:12px; color:var(--text-muted);">
-              <div>📅 ${submittedAt}</div>
-              <div>📊 Nilai: <strong>${score}</strong></div>
-              <div>⏱️ ${item.durasi_ujian || 0} menit</div>
-            </div>
-            <div style="margin-top:10px; font-size:11px; color:var(--primary);">
-              Klik untuk lihat detail jawaban
-            </div>
-          </div>
-        `;
+          `;
+        }
       });
       
-      historyContainer.innerHTML = historyHTML;
+      if (mapelCount === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-muted);">Belum ada ujian yang selesai</div>';
+      } else {
+        container.innerHTML = `
+          <div style="margin-bottom:20px;">
+            <div style="font-weight:700; font-size:18px; color:var(--text-main);">${agenda.agenda_ujian}</div>
+          </div>
+          <div style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:10px;">
+            MATA PELAJARAN YANG SELESAI (${mapelCount})
+          </div>
+          ${html}
+        `;
+      }
     } else {
-      historyContainer.innerHTML = `
-        <div style="text-align:center; padding:40px; color:var(--text-muted);">
-          <div style="font-size:60px; margin-bottom:20px;">📝</div>
-          <h3>Belum ada riwayat ujian</h3>
-          <p>Mulai kerjakan ujian untuk melihat riwayat di sini.</p>
-        </div>
-      `;
+      container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--primary);">Error memuat history</div>';
     }
   } catch (error) {
-    historyContainer.innerHTML = '<div style="text-align:center; padding:40px; color:var(--primary);">Error memuat riwayat</div>';
+    container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--primary);">Error memuat history</div>';
     console.error('History load error:', error);
   }
 }
 
-async function viewHistoryDetail(mapelId) {
+async function viewDetailJawaban(mapelId) {
   showLoader(true, 'Memuat detail jawaban...');
   
   try {
-    const result = await apiRequest(`/history-detail?agenda_id=${user.id_agenda}&peserta_id=${user.id}&mapel_id=${mapelId}`);
+    const result = await apiRequest('/get-soal', 'POST', {
+      agenda_id: user.id_agenda,
+      peserta_id: user.id,
+      mapel_id: mapelId
+    });
     
     if (result.success) {
-      currentHistoryMapel = result.mapel;
-      currentHistoryQuestions = result.soal || [];
-      const jawaban = result.jawaban || {};
-      
-      let detailHTML = `
-        <div style="margin-bottom:20px;">
-          <h3>${currentHistoryMapel.nama_mata_pelajaran}</h3>
-          <div style="display:flex; gap:15px; font-size:14px; color:var(--text-muted);">
-            <div>📅 ${result.waktu_selesai ? new Date(result.waktu_selesai).toLocaleString('id-ID') : '-'}</div>
-            <div>📊 Nilai: <strong>${result.nilai_akhir !== null ? result.nilai_akhir : '-'}</strong></div>
-          </div>
-        </div>
-      `;
-      
-      // Add stats
-      const answeredCount = Object.values(jawaban).filter(a => a && a.trim()).length;
-      const totalCount = currentHistoryQuestions.length;
-      
-      detailHTML += `
-        <div style="display:flex; gap:10px; margin-bottom:20px;">
-          <div class="stat-box dijawab">
-            <div class="stat-number">${answeredCount}</div>
-            <div class="stat-label">Dijawab</div>
-          </div>
-          <div class="stat-box kosong">
-            <div class="stat-number">${totalCount - answeredCount}</div>
-            <div class="stat-label">Kosong</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-number">${totalCount}</div>
-            <div class="stat-label">Total Soal</div>
-          </div>
-        </div>
-      `;
-      
-      // Add questions
-      currentHistoryQuestions.forEach((question, index) => {
-        const answer = jawaban[index] || '(Tidak dijawab)';
-        const answerHTML = formatJawaban(question.tipe_soal, answer, question);
-        
-        detailHTML += `
-          <div style="margin-bottom:25px; padding:15px; border:1px solid var(--border); border-radius:8px;">
-            <div style="font-weight:700; margin-bottom:10px; color:var(--primary);">
-              Soal ${index + 1}: ${question.tipe_soal}
-            </div>
-            <div style="margin-bottom:10px;">${question.soal || question.soal_text || ''}</div>
-            <div style="font-weight:600; margin:10px 0 5px 0;">Jawaban Anda:</div>
-            <div>${answerHTML}</div>
-          </div>
-        `;
-      });
-      
-      // Update modal content
-      const detailTitle = document.getElementById('detail-title');
-      const detailContent = document.getElementById('detail-content');
-      const detailModal = document.getElementById('modal-detail-jawaban');
-      
-      if (detailTitle) detailTitle.innerText = `Detail Jawaban: ${currentHistoryMapel.nama_mata_pelajaran}`;
-      if (detailContent) detailContent.innerHTML = detailHTML;
-      if (detailModal) detailModal.classList.remove('hidden');
-      
       showLoader(false);
+      renderDetailJawabanContent(result);
     } else {
       showLoader(false);
-      showToast(result.message || 'Gagal memuat detail', 'error');
+      showToast('Gagal memuat detail jawaban', 'error');
     }
   } catch (error) {
     showLoader(false);
-    showToast('Error memuat detail jawaban', 'error');
-    console.error('History detail error:', error);
+    showToast('Error memuat detail', 'error');
+    console.error('Detail load error:', error);
+  }
+}
+
+function renderDetailJawabanContent(examData) {
+  const content = document.getElementById('detail-content');
+  const title = document.getElementById('detail-title');
+  
+  if (!content || !title) return;
+  
+  title.innerText = `Detail Jawaban - ${examData.mapel_detail.nama_mata_pelajaran}`;
+  
+  const jawabanArray = examData.jawaban_sebelumnya.split('|');
+  const questions = examData.data_soal || [];
+  
+  let html = `
+    <div style="background:var(--primary-light); padding:15px; border-radius:8px; margin-bottom:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700; color:var(--primary); font-size:16px;">${agenda.agenda_ujian}</div>
+          <div style="font-size:13px; margin-top:5px;">
+            <span style="background:var(--primary); color:white; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600;">
+              Ujian Umum
+            </span>
+            <span style="margin-left:10px; font-size:12px; color:var(--text-muted);">
+              Mata Pelajaran: <strong>${examData.mapel_detail.nama_mata_pelajaran}</strong>
+            </span>
+          </div>
+        </div>
+        <div style="text-align:right; margin-top:10px;">
+          <div style="font-size:12px; color:var(--text-muted);">Mulai</div>
+          <div style="font-size:14px; font-weight:700;">${formatTanggal(examData.waktu_mulai)}</div>
+        </div>
+      </div>
+    </div>
+    
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px;">
+      <div class="stat-box">
+        <div class="stat-number" style="color:#0369a1;">${questions.length}</div>
+        <div class="stat-label">Total Soal</div>
+      </div>
+      <div class="stat-box dijawab">
+        <div class="stat-number" style="color:#059669;">${jawabanArray.filter(j => j && j !== '-').length}</div>
+        <div class="stat-label">Dijawab</div>
+      </div>
+      <div class="stat-box kosong">
+        <div class="stat-number" style="color:#dc2626;">${jawabanArray.filter(j => !j || j === '-').length}</div>
+        <div class="stat-label">Kosong</div>
+      </div>
+    </div>
+    
+    <div style="font-weight:700; margin-bottom:15px; color:var(--text-main); font-size:16px;">DETAIL JAWABAN:</div>
+  `;
+  
+  questions.forEach((question, index) => {
+    const jawaban = jawabanArray[index] || '-';
+    const isDijawab = jawaban && jawaban !== '-';
+    
+    html += `
+      <div class="jawaban-item" style="margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid #e2e8f0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div style="font-weight:600; color:var(--text-main); font-size:14px;">Soal No. ${index + 1}</div>
+          <div style="font-size:11px; padding:2px 8px; border-radius:3px; 
+                background:${isDijawab ? '#10b98120' : '#ef444420'}; 
+                color:${isDijawab ? '#059669' : '#dc2626'}; font-weight:600;">
+            ${isDijawab ? '✓ DIJAWAB' : '✗ TIDAK DIJAWAB'}
+          </div>
+        </div>
+        
+        <div style="margin-bottom:10px; font-size:14px; line-height:1.5;">
+          ${question.pertanyaan.replace(/\n/g,'<br>')}
+        </div>
+        
+        ${question.gambar_url ? `<img src="${question.gambar_url}" style="max-width:100%; max-height:200px; border-radius:8px; margin:10px 0;" alt="Gambar soal">` : ''}
+        
+        <div style="padding:10px; background:${isDijawab ? '#f0fdf4' : '#fef2f2'}; 
+             border-radius:4px; border-left:3px solid ${isDijawab ? '#10b981' : '#ef4444'};">
+          <div style="font-size:13px; color:var(--text-muted); margin-bottom:5px;">Jawaban Anda:</div>
+          <div style="font-size:14px; font-weight:${isDijawab ? '600' : '400'};">
+            ${jawaban === '-' ? '(Tidak dijawab)' : jawaban}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  content.innerHTML = html;
+  
+  const detailModal = document.getElementById('modal-detail-jawaban');
+  if (detailModal) {
+    detailModal.classList.remove('hidden');
   }
 }
 
 function closeDetailJawaban() {
   const detailModal = document.getElementById('modal-detail-jawaban');
-  if (detailModal) detailModal.classList.add('hidden');
+  if (detailModal) {
+    detailModal.classList.add('hidden');
+  }
 }
 
 function downloadHasilUjian() {
-  if (!currentHistoryMapel || !currentHistoryQuestions) {
-    showToast('Tidak ada data untuk diunduh', 'warning');
+  if (!user || !agenda || !jawabanData) {
+    showToast('Data tidak lengkap', 'error');
     return;
   }
   
-  // Create HTML content for download
-  const now = new Date();
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Hasil Ujian - ${currentHistoryMapel.nama_mata_pelajaran}</title>
-      <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { color: #dc2626; }
-        .info { background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .question { margin-bottom: 25px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        .answer { background: #f0fdf4; padding: 10px; border-radius: 6px; margin-top: 10px; }
-        .no-answer { background: #fef2f2; color: #dc2626; padding: 10px; border-radius: 6px; }
-      </style>
-    </head>
-    <body>
-      <h1>Hasil Ujian</h1>
-      <div class="info">
-        <strong>Mata Pelajaran:</strong> ${currentHistoryMapel.nama_mata_pelajaran}<br>
-        <strong>Peserta:</strong> ${user.nama_peserta}<br>
-        <strong>Tanggal:</strong> ${now.toLocaleString('id-ID')}<br>
-        <strong>Asal Sekolah:</strong> ${user.asal_sekolah}
-      </div>
-      ${currentHistoryQuestions.map((question, index) => `
-        <div class="question">
-          <h3>Soal ${index + 1}</h3>
-          <p>${question.soal || question.soal_text || ''}</p>
-          <div class="${jawabanData && jawabanData.jawaban && JSON.parse(jawabanData.jawaban)[index] ? 'answer' : 'no-answer'}">
-            <strong>Jawaban:</strong> ${jawabanData && jawabanData.jawaban && JSON.parse(jawabanData.jawaban)[index] || '(Tidak dijawab)'}
+  showLoader(true, 'Menyiapkan download...');
+  
+  const content = document.createElement('div');
+  content.style.padding = '30px';
+  content.style.fontFamily = 'Arial, sans-serif';
+  content.style.background = 'white';
+  content.style.maxWidth = '800px';
+  content.style.margin = '0 auto';
+  
+  const jawabanArray = jawabanData.jawaban_sebelumnya.split('|');
+  const questions = jawabanData.data_soal || [];
+  
+  let soalHTML = '';
+  questions.forEach((question, index) => {
+    const jawaban = jawabanArray[index] || '-';
+    const isDijawab = jawaban && jawaban !== '-';
+    
+    soalHTML += `
+      <div style="margin-bottom:25px; padding-bottom:25px; ${index < questions.length - 1 ? 'border-bottom:1px solid #ddd;' : ''}">
+        <div style="background:#f8fafc; padding:15px; border-radius:5px; margin-bottom:15px;">
+          <div style="font-weight:bold; color:#dc2626; margin-bottom:10px; font-size:16px;">Soal No. ${index + 1}</div>
+          <div style="font-size:14px; line-height:1.5;">
+            ${question.pertanyaan}
           </div>
         </div>
-      `).join('')}
-    </body>
-    </html>
+        <div style="background:${isDijawab ? '#f0fdf4' : '#fef2f2'}; padding:15px; border-radius:5px; border-left:4px solid ${isDijawab ? '#10b981' : '#dc2626'};">
+          <div style="font-weight:bold; margin-bottom:10px; color:${isDijawab ? '#059669' : '#dc2626'};">${isDijawab ? '✓ JAWABAN ANDA:' : '✗ TIDAK DIJAWAB'}</div>
+          <div style="font-size:14px;">${jawaban === '-' ? '(Tidak dijawab)' : jawaban}</div>
+        </div>
+      </div>
+    `;
+  });
+  
+  content.innerHTML = `
+    <div style="text-align:center; margin-bottom:30px; border-bottom:2px solid #dc2626; padding-bottom:20px;">
+      <h1 style="color:#dc2626; margin-bottom:10px;">HASIL UJIAN</h1>
+      <h2 style="color:#0f172a; margin-top:0;">${jawabanData.mapel_detail.nama_mata_pelajaran}</h2>
+    </div>
+    
+    <div style="margin-bottom:30px;">
+      <h3 style="color:#0f172a; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">INFORMASI UJIAN</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:14px;">
+        <tr><td style="padding:8px; width:200px; color:#64748b;"><strong>Nama Peserta:</strong></td><td style="padding:8px;">${user.nama_peserta}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>NIS/Username:</strong></td><td style="padding:8px;">${user.nis_username}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Agenda Ujian:</strong></td><td style="padding:8px;">${agenda.agenda_ujian}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Mata Pelajaran:</strong></td><td style="padding:8px;">${jawabanData.mapel_detail.nama_mata_pelajaran}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Jumlah Soal:</strong></td><td style="padding:8px;">${questions.length}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Dijawab:</strong></td><td style="padding:8px;">${jawabanArray.filter(j => j && j !== '-').length}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Kosong:</strong></td><td style="padding:8px;">${jawabanArray.filter(j => !j || j === '-').length}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Waktu Mulai:</strong></td><td style="padding:8px;">${formatTanggal(jawabanData.waktu_mulai)}</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Durasi Ujian:</strong></td><td style="padding:8px;">${jawabanData.mapel_detail.durasi_ujian || 0} menit</td></tr>
+        <tr><td style="padding:8px; color:#64748b;"><strong>Tanggal Download:</strong></td><td style="padding:8px;">${new Date().toLocaleDateString('id-ID', { 
+          day: '2-digit', 
+          month: 'long', 
+          year: 'numeric',
+          hour: '2-digit', 
+          minute: '2-digit'
+        })}</td></tr>
+      </table>
+    </div>
+    
+    <h3 style="color:#0f172a; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-top:40px;">DETAIL JAWABAN</h3>
+    ${soalHTML}
+    
+    <div style="margin-top:50px; padding-top:20px; border-top:1px solid #ddd; text-align:center; color:#64748b; font-size:12px;">
+      <p>Dokumen ini dihasilkan secara otomatis oleh Sistem CBT Ujian Online</p>
+      <p>${new Date().toLocaleDateString('id-ID', { 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })}</p>
+    </div>
   `;
   
-  // Create and trigger download
-  const blob = new Blob([htmlContent], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `Hasil_Ujian_${currentHistoryMapel.nama_mata_pelajaran}_${now.getTime()}.html`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  
-  showToast('Hasil ujian berhasil diunduh', 'success');
+  html2canvas(content, { 
+    scale: 2, 
+    useCORS: true, 
+    logging: false, 
+    backgroundColor: '#ffffff' 
+  }).then(canvas => {
+    const imgData = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    const fileName = `Hasil_${jawabanData.mapel_detail.nama_mata_pelajaran.replace(/\s+/g, '_')}_${user.nis_username}_${new Date().getTime()}.png`;
+    
+    link.download = fileName;
+    link.href = imgData;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showLoader(false);
+    showToast('Hasil berhasil diunduh', 'success');
+  }).catch(err => {
+    showLoader(false);
+    showToast('Gagal mengunduh hasil', 'error');
+    console.error('Download canvas error:', err);
+  });
 }
 
-/* ERROR HANDLING */
-window.addEventListener('error', function(event) {
-  console.error('Global error:', event.error);
-  showToast('Terjadi kesalahan sistem', 'error');
-});
-
-window.addEventListener('unhandledrejection', function(event) {
-  console.error('Unhandled promise rejection:', event.reason);
-  showToast('Terjadi kesalahan sistem', 'error');
-});
-
-// Export functions to global scope
+/* GLOBAL FUNCTION EXPORTS */
 window.toggleAuth = toggleAuth;
-window.handleLogin = handleLogin;
+window.togglePasswordVisibility = togglePasswordVisibility;
+window.loadAgendasIfNeeded = loadAgendasIfNeeded;
 window.handleRegister = handleRegister;
+window.handleLogin = handleLogin;
+window.closeKartu = closeKartu;
+window.downloadKartu = downloadKartu;
 window.confirmLogout = confirmLogout;
+window.verifyToken = verifyToken;
 window.goDashboard = goDashboard;
-window.goMapel = goMapel;
-window.viewHistory = viewHistory;
 window.startExam = startExam;
-window.nav = nav;
-window.toggleRagu = toggleRagu;
+window.confirmStartExam = confirmStartExam;
+window.nav = navigateQuestion;
 window.toggleSidebar = toggleSidebar;
-window.jumpToQuestion = jumpToQuestion;
+window.toggleRagu = toggleRagu;
+window.saveSingleAnswer = saveSingleAnswer;
+window.saveComplexAnswer = saveComplexAnswer;
+window.saveTrueFalse = saveTrueFalse;
+window.handleMatch = handleMatch;
+window.resetMatch = resetMatch;
+window.saveMatchAnswer = saveMatchAnswer;
 window.finishCheck = finishCheck;
+window.resumeFromViolation = resumeFromViolation;
+window.viewHistory = viewHistory;
+window.viewDetailJawaban = viewDetailJawaban;
 window.closeDetailJawaban = closeDetailJawaban;
 window.downloadHasilUjian = downloadHasilUjian;
-window.verifyToken = verifyToken;
-window.confirmStartExam = confirmStartExam;
-window.resumeFromViolation = resumeFromViolation;
-window.togglePasswordVisibility = togglePasswordVisibility;
-window.toggleKartuPassword = toggleKartuPassword;
-window.copyKartuPassword = copyKartuPassword;
-window.downloadKartu = downloadKartu;
-window.closeKartu = closeKartu;
-window.showForgotPassword = showForgotPassword;
-window.closeForgotPassword = closeForgotPassword;
-window.requestOTP = requestOTP;
-window.verifyOTP = verifyOTP;
-window.resetPassword = resetPassword;
-window.backToStep1 = backToStep1;
-window.backToStep2 = backToStep2;
-window.goToLoginAfterReset = goToLoginAfterReset;
+window.checkOpen = checkOpen;
+window.goMapel = goMapel;
+window.adjustZoom = adjustZoom;
+window.closeZoomModal = closeZoomModal;
+window.resetZoom = resetZoom;
 window.scrollToTop = scrollToTop;
 window.scrollToBottom = scrollToBottom;
-window.openZoomModal = openZoomModal;
-window.closeZoomModal = closeZoomModal;
-window.adjustZoom = adjustZoom;
-window.downloadImage = downloadImage;
-</script>
+window.showToast = showToast;
+window.showSuccessToast = showSuccessToast;
+window.showErrorToast = showErrorToast;
+window.showWarningToast = showWarningToast;
+window.showInfoToast = showInfoToast;
+window.clearAllToasts = clearAllToasts;
+window.removeToast = removeToast;
+
+// Initialize event listeners for navigation buttons
+document.addEventListener('DOMContentLoaded', function() {
+  const prevButton = document.getElementById('btn-prev');
+  const nextButton = document.getElementById('btn-next');
+  
+  if (prevButton) {
+    prevButton.onclick = () => navigateQuestion(-1);
+  }
+  
+  if (nextButton) {
+    nextButton.onclick = () => navigateQuestion(1);
+  }
+});
+  </script>
+  
+  <!-- Modal Zoom akan dibuat secara dinamis oleh JavaScript -->
+  <div id="modal-zoom-container" style="display:none;">
+    <!-- Modal zoom akan ditambahkan di sini oleh JavaScript -->
+  </div>
+  
 </body>
 </html>
