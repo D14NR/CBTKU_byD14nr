@@ -5281,6 +5281,13 @@ function downloadHasilUjian() {
   });
 }
 
+  function optimizeImageUrl(url) {
+  // Jika server mendukung parameter ukuran, tambahkan parameter
+  if (url.includes('?')) {
+    return url + '&w=800&q=75'; // Contoh: lebar 800px, kualitas 75%
+  }
+  return url;
+
 /* GLOBAL FUNCTION EXPORTS */
 window.toggleAuth = toggleAuth;
 window.togglePasswordVisibility = togglePasswordVisibility;
