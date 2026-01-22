@@ -1804,6 +1804,22 @@
   margin-left: 10px;
   display: none; /* Set ke 'inline' untuk debugging */
 }
+
+    /* Loading skeleton untuk gambar */
+.img-skeleton {
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
   </style>
 </head>
 <body>
@@ -2279,8 +2295,10 @@ let durasiUjian = 0;
 let kartuPasswordVisible = false;
 let originalPassword = '';
 let saveTimeout = null;
-let autoSaveInterval = null
-const SAVE_DELAY = 1500; 
+let autoSaveInterval = null;
+let imageCache = {};
+const SAVE_DELAY = 1500;
+    
 // Zoom state
 let zoomedImg = null;
 let currentZoom = 1;
@@ -4071,11 +4089,15 @@ async function initExamSession() {
   
   const e_mapel = document.getElementById('e_mapel');
   const e_user = document.getElementById('e_user');
-  const q_area = document.getElementById('q_area');
+  const qArea = document.getElementById('q_area');
+  if (qArea) {
+    qArea.scrollTop = 0;
+  }
+};
   
   if (e_mapel && mapel) e_mapel.innerText = mapel.nama_mata_pelajaran; 
   if (e_user && user) e_user.innerText = user.nama_peserta;
-  if (q_area) q_area.innerHTML = '';
+  if (q_area) q_area.innerHTML = '<div style="text-align:center; padding:50px;">Mempersiapkan soal...</div>';
   
   try {
     const result = await apiRequest('/get-soal', 'POST', {
@@ -4104,9 +4126,12 @@ async function initExamSession() {
       answers[question.id] = jawabanArray[index] || '-';
     });
     
+    // ✅ PRELOAD SEMUA GAMBAR TERLEBIH DAHULU
+    await preloadAllImages();
+    
+    // Setelah semua gambar dimuat, render soal pertama
     qIdx = 0; 
     renderQuestion(0);
-    startAutoSave();
     
     // Hitung waktu selesai
     const startTime = new Date(waktuMulaiUjian).getTime();
@@ -4116,6 +4141,10 @@ async function initExamSession() {
     if (timerInt) clearInterval(timerInt); 
     timerInt = setInterval(updateTimer, 1000);
     startAntiCheat();
+    
+    // Mulai auto-save periodik
+    startAutoSave();
+    
   } catch (error) { 
     showToast('Error memuat soal', 'error'); 
     console.error('Question load error:', error); 
@@ -4147,6 +4176,35 @@ function updateTimer() {
   }
 }
 
+    async function preloadAllImages() {
+  showLoader(true, 'Mempersiapkan soal...');
+  
+  const imagePromises = [];
+  
+  questions.forEach((question, index) => {
+    if (question.gambar_url && question.gambar_url.trim() !== '') {
+      const img = new Image();
+      img.src = question.gambar_url;
+      img.crossOrigin = 'anonymous';
+      
+      const promise = new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => {
+          console.warn(`Gagal memuat gambar untuk soal ${index + 1}: ${question.gambar_url}`);
+          resolve(); // Tetap lanjut meski gambar gagal
+        };
+      });
+      
+      imagePromises.push(promise);
+    }
+  });
+  
+  // Tunggu semua gambar selesai dimuat (atau timeout)
+  await Promise.allSettled(imagePromises);
+  
+  showLoader(false);
+}
+
 function renderQuestion(idx) {
   if (idx < 0 || idx >= questions.length) return;
   
@@ -4163,8 +4221,19 @@ function renderQuestion(idx) {
       <div style="font-weight:700;color:var(--primary);margin-bottom:10px;">No. ${idx + 1}</div>
   `;
   
-  if (question.gambar_url) {
-    html += `<img src="${question.gambar_url}" class="q-img" referrerpolicy="no-referrer" onerror="this.style.display='none'" alt="Gambar soal ${idx + 1}">`;
+  // ✅ GUNAKAN GAMBAR YANG SUDAH DI-PRELOAD
+  if (question.gambar_url && question.gambar_url.trim() !== '') {
+    // Gunakan cache atau URL langsung
+    const imgSrc = imageCache[question.gambar_url] || question.gambar_url;
+    html += `
+      <div class="q-img-container">
+        <img src="${imgSrc}" class="q-img" 
+             referrerpolicy="no-referrer" 
+             onerror="this.style.display='none'; console.warn('Gambar gagal dimuat: ${question.gambar_url}')" 
+             alt="Gambar soal ${idx + 1}"
+             style="display:block; margin:10px 0; max-width:100%;">
+      </div>
+    `;
   }
   
   html += `<div style="margin-bottom:20px;font-size:16px;line-height:1.6;">${question.pertanyaan.replace(/\n/g,'<br>')}</div>`;
@@ -4330,14 +4399,12 @@ function renderQuestion(idx) {
   }
   
   const prevButton = document.getElementById('btn-prev');
-  if (prevButton) {
-    prevButton.disabled = idx === 0;
-  }
-  
-  const nextButton = document.getElementById('btn-next');
-  if (nextButton) {
-    nextButton.innerText = idx === questions.length - 1 ? 'SELESAI' : 'LANJUT';
-  }
+const nextButton = document.getElementById('btn-next');
+if (prevButton) {
+  prevButton.disabled = idx === 0;
+}
+if (nextButton) {
+  nextButton.innerText = idx === questions.length - 1 ? 'SELESAI' : 'LANJUT';
 }
 
 /* SAVING FUNCTIONS */
@@ -4557,10 +4624,13 @@ function saveMatchAnswer(questionId) {
   saveSingleAnswer(questionId, value);
 }
 
-function navigateQuestion(direction) {
+function nav(direction) {
   const newIndex = qIdx + direction;
   if (newIndex >= questions.length) {
     finishCheck();
+  } else if (newIndex < 0) {
+    // Tidak perlu lakukan apa-apa jika sudah di soal pertama
+    return;
   } else {
     renderQuestion(newIndex);
   }
@@ -5081,20 +5151,16 @@ window.showWarningToast = showWarningToast;
 window.showInfoToast = showInfoToast;
 window.clearAllToasts = clearAllToasts;
 window.removeToast = removeToast;
+window.nav = function(direction) {
+  const newIndex = qIdx + direction;
+window.toggleRagu = function() {
+  const raguCheckbox = document.getElementById('chk-ragu');
+  if (raguCheckbox) {
+    ragu[qIdx] = raguCheckbox.checked;
+    renderNavigation();
+  }
+};
 
-// Initialize event listeners for navigation buttons
-document.addEventListener('DOMContentLoaded', function() {
-  const prevButton = document.getElementById('btn-prev');
-  const nextButton = document.getElementById('btn-next');
-  
-  if (prevButton) {
-    prevButton.onclick = () => navigateQuestion(-1);
-  }
-  
-  if (nextButton) {
-    nextButton.onclick = () => navigateQuestion(1);
-  }
-});
   </script>
   
   <!-- Modal Zoom akan dibuat secara dinamis oleh JavaScript -->
