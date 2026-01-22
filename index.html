@@ -2282,6 +2282,141 @@ const MAX_ZOOM = 3;
 const MIN_ZOOM = 0.5;
 const ZOOM_STEP = 0.25;
 
+  let imagePreloadPromise = null;
+async function preloadAllImages() {
+  console.log('Memulai preload gambar dengan Promise...');
+  
+  const imageUrls = new Set();
+  
+  // Kumpulkan semua URL gambar dari semua soal
+  questions.forEach((question, index) => {
+    if (question.gambar_url && question.gambar_url.trim() !== '') {
+      imageUrls.add(question.gambar_url);
+    }
+    
+    // Juga preload gambar dari pilihan (jika ada)
+    ['a', 'b', 'c', 'd', 'e'].forEach(opt => {
+      const gambarKey = `gambar_${opt}`;
+      if (question[gambarKey] && question[gambarKey].trim() !== '') {
+        imageUrls.add(question[gambarKey]);
+      }
+    });
+  });
+  
+  console.log(`Total ${imageUrls.size} gambar akan di-preload`);
+  
+  if (imageUrls.size === 0) {
+    console.log('Tidak ada gambar yang perlu di-preload');
+    return Promise.resolve();
+  }
+  
+  // Buat array dari semua promises untuk preload
+  const preloadPromises = [];
+  let loadedCount = 0;
+  let failedCount = 0;
+  
+  imageUrls.forEach(url => {
+    const promise = new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.referrerPolicy = "no-referrer";
+      
+      img.onload = () => {
+        loadedCount++;
+        imageCache.set(url, img);
+        console.log(`✅ Gambar loaded: ${loadedCount}/${imageUrls.size} - ${url.substring(0, 50)}...`);
+        resolve(img);
+      };
+      
+      img.onerror = (err) => {
+        failedCount++;
+        console.error(`❌ Gagal memuat gambar: ${url}`, err);
+        // Tetap resolve meski gagal, agar tidak menghalangi render soal
+        resolve(null);
+      };
+      
+      // Mulai load
+      img.src = url;
+    });
+    
+    preloadPromises.push(promise);
+  });
+  
+  // Kembalikan promise yang menunggu semua gambar selesai di-load
+  return Promise.all(preloadPromises).then(() => {
+    console.log(`🎉 Preload selesai: ${loadedCount} berhasil, ${failedCount} gagal`);
+    return { loaded: loadedCount, failed: failedCount };
+  });
+}
+  function getCachedImage(url) {
+  if (imageCache.has(url)) {
+    const img = imageCache.get(url);
+    if (img.complete && img.naturalHeight !== 0) {
+      return img;
+    }
+  }
+  return null;
+}
+
+  function renderQuestionImage(question, idx) {
+  if (!question.gambar_url) return '';
+  
+  const imgUrl = question.gambar_url;
+  const cachedImg = getCachedImage(imgUrl);
+  
+  // Jika gambar sudah di-cache dan siap, gunakan langsung
+  if (cachedImg) {
+    return `
+      <div class="q-img-container">
+        <img src="${imgUrl}" 
+             class="q-img" 
+             referrerpolicy="no-referrer" 
+             style="opacity:1;"
+             alt="Gambar soal ${idx + 1}">
+        <div class="q-img-controls">
+          <button class="q-img-btn" onclick="openZoomModal('${imgUrl}', 'Gambar soal ${idx + 1}')">+</button>
+          <button class="q-img-btn" onclick="resetImageZoom(this)">↻</button>
+        </div>
+      </div>
+    `;
+  } else {
+    // Jika belum di-cache, tampilkan placeholder dan load di background
+    return `
+      <div class="q-img-container">
+        <img src="${imgUrl}" 
+             class="q-img" 
+             referrerpolicy="no-referrer" 
+             onload="this.style.opacity='1'" 
+             onerror="this.style.display='none'; console.error('Gagal memuat gambar: ${imgUrl}')"
+             style="opacity:0; transition: opacity 0.5s ease;"
+             alt="Gambar soal ${idx + 1}">
+        <div class="q-img-controls">
+          <button class="q-img-btn" onclick="openZoomModal('${imgUrl}', 'Gambar soal ${idx + 1}')">+</button>
+          <button class="q-img-btn" onclick="resetImageZoom(this)">↻</button>
+        </div>
+        <!-- Placeholder loading -->
+        <div class="img-loading-placeholder" style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+          background-size: 200% 100%;
+          animation: loading 1.5s infinite;
+          border-radius: var(--radius-md);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--text-muted);
+          font-size: 12px;
+          opacity: 0.7;
+        "></div>
+      </div>
+    `;
+  }
+}
+
 /* API HELPER */
 async function apiRequest(endpoint, method = 'GET', body = null, options = {}) {
   const showSpinner = options.showSpinner !== false;
@@ -2753,19 +2888,58 @@ function preloadAllImages() {
 }
 
 function preloadNextQuestion(currentIndex) {
+  // Preload 2 soal ke depan beserta gambarnya
   for (let i = 1; i <= 2; i++) {
     const nextIdx = currentIndex + i;
     if (nextIdx < questions.length) {
       const nextQuestion = questions[nextIdx];
-      if (nextQuestion.gambar_url && !imageCache.has(nextQuestion.gambar_url)) {
+      
+      // Preload gambar untuk soal berikutnya jika belum di-cache
+      if (nextQuestion.gambar_url && !getCachedImage(nextQuestion.gambar_url)) {
         const img = new Image();
         img.src = nextQuestion.gambar_url;
         img.crossOrigin = "anonymous";
         img.referrerPolicy = "no-referrer";
-        img.onload = () => imageCache.set(nextQuestion.gambar_url, img);
+        img.onload = () => {
+          imageCache.set(nextQuestion.gambar_url, img);
+          console.log(`🔄 Preloaded gambar untuk soal ${nextIdx + 1}`);
+        };
       }
     }
   }
+}
+
+  function addLoadingAnimationCSS() {
+  if (!document.querySelector('#loading-animation-style')) {
+    const style = document.createElement('style');
+    style.id = 'loading-animation-style';
+    style.textContent = `
+      @keyframes loading {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      
+      .q-img-loading {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
+// Panggil fungsi ini di init
+addLoadingAnimationCSS();
+
+  function getQuestionsWithReadyImages() {
+  return questions.filter(q => areQuestionImagesReady(q));
+}
+  function areQuestionImagesReady(question) {
+  if (!question.gambar_url) return true;
+  
+  const cachedImg = getCachedImage(question.gambar_url);
+  return cachedImg !== null;
 }
 
 /* ZOOM FUNCTIONS */
@@ -3980,25 +4154,8 @@ function renderQuestion(idx) {
   
   if (!area) return;
   
-  // Tampilkan loader mini hanya jika gambar belum siap
-  let imageHTML = '';
-  if (question.gambar_url) {
-    imageHTML = `
-      <div class="q-img-container">
-        <img src="${question.gambar_url}" 
-             class="q-img" 
-             referrerpolicy="no-referrer" 
-             onload="this.style.opacity='1'" 
-             onerror="this.style.display='none'; console.error('Gagal memuat gambar: ${question.gambar_url}')"
-             style="opacity:${imageCache.has(question.gambar_url) ? '1' : '0.7'}; transition: opacity 0.3s ease;"
-             alt="Gambar soal ${idx + 1}">
-        <div class="q-img-controls">
-          <button class="q-img-btn" onclick="openZoomModal('${question.gambar_url}', 'Gambar soal ${idx + 1}')">+</button>
-          <button class="q-img-btn" onclick="resetImageZoom(this)">↻</button>
-        </div>
-      </div>
-    `;
-  }
+  // Render gambar menggunakan fungsi yang sudah dioptimasi
+  const imageHTML = renderQuestionImage(question, idx);
   
   let html = `
     <div class="q-card">
@@ -4063,6 +4220,10 @@ function renderQuestion(idx) {
   
   // Log untuk debugging
   console.log(`Rendering soal ${idx + 1}/${questions.length} - ID: ${question.id}`);
+  if (question.gambar_url) {
+    const cached = getCachedImage(question.gambar_url);
+    console.log(`Gambar status: ${cached ? '✅ Di-cache' : '❌ Belum di-cache'}`);
+  }
 }
 
 function renderQuestionOptions(question, answer, questionIndex) {
@@ -4336,13 +4497,14 @@ async function initExamSession() {
   if (e_mapel && mapel) e_mapel.innerText = mapel.nama_mata_pelajaran; 
   if (e_user && user) e_user.innerText = user.nama_peserta;
   
-  // Tampilkan loader global di awal
+  // Tampilkan loader global di awal dengan progress
   if (q_area) q_area.innerHTML = `
     <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
       <div class="loader-spinner" style="width:60px; height:60px;"></div>
       <div class="loader-text" style="margin-top:20px; font-size:16px;">Mempersiapkan soal ujian...</div>
-      <div style="font-size:14px; color:var(--text-muted); margin-top:10px;">
-        Mengunduh ${pendingMapelId ? 'soal' : 'data'}...
+      <div style="font-size:14px; color:var(--text-muted); margin-top:10px; text-align:center;">
+        <div id="load-status">Mengunduh soal dan gambar...</div>
+        <div id="image-load-status" style="font-size:12px; margin-top:5px;"></div>
       </div>
       <div id="load-progress" style="width:80%; max-width:300px; height:4px; background:var(--border); border-radius:2px; margin-top:20px; overflow:hidden;">
         <div id="progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.3s;"></div>
@@ -4353,7 +4515,11 @@ async function initExamSession() {
   try {
     // Update progress bar
     const progressBar = document.getElementById('progress-bar');
-    if (progressBar) progressBar.style.width = '30%';
+    const loadStatus = document.getElementById('load-status');
+    const imageLoadStatus = document.getElementById('image-load-status');
+    
+    if (progressBar) progressBar.style.width = '20%';
+    if (loadStatus) loadStatus.innerText = 'Mengambil data soal...';
     
     // LOAD SEMUA DATA SEKALIGUS
     const result = await apiRequest('/get-soal', 'POST', {
@@ -4372,7 +4538,8 @@ async function initExamSession() {
     }
     
     // Update progress bar
-    if (progressBar) progressBar.style.width = '60%';
+    if (progressBar) progressBar.style.width = '50%';
+    if (loadStatus) loadStatus.innerText = 'Memproses data soal...';
     
     // Simpan SEMUA data sekaligus
     mapel = result.mapel_detail;
@@ -4397,36 +4564,66 @@ async function initExamSession() {
     });
     
     // Update progress bar
-    if (progressBar) progressBar.style.width = '80%';
+    if (progressBar) progressBar.style.width = '70%';
+    if (loadStatus) loadStatus.innerText = 'Menyiapkan gambar...';
+    if (imageLoadStatus) imageLoadStatus.innerText = 'Memuat gambar (0/0)...';
     
-    // PRELOAD semua gambar di latar belakang (tanpa menunggu)
-    setTimeout(() => preloadAllImages(), 100);
+    // PRELOAD SEMUA GAMBAR DENGAN MENUNGGU (WAIT)
+    console.log(`Memulai preload untuk ${questions.length} soal...`);
+    
+    // Hitung jumlah gambar yang akan di-preload
+    let totalImages = 0;
+    questions.forEach(question => {
+      if (question.gambar_url && question.gambar_url.trim() !== '') {
+        totalImages++;
+      }
+    });
+    
+    if (imageLoadStatus) {
+      imageLoadStatus.innerText = `Memuat gambar (0/${totalImages})...`;
+    }
+    
+    // Preload gambar dan tunggu selesai sebelum render soal pertama
+    try {
+      const preloadResult = await preloadAllImages();
+      
+      if (imageLoadStatus) {
+        imageLoadStatus.innerText = `✅ Gambar siap: ${preloadResult.loaded}/${totalImages}`;
+      }
+      
+    } catch (preloadError) {
+      console.error('Error saat preload gambar:', preloadError);
+      if (imageLoadStatus) {
+        imageLoadStatus.innerText = '⚠️ Beberapa gambar mungkin gagal dimuat';
+      }
+    }
     
     // Update progress bar
     if (progressBar) progressBar.style.width = '100%';
+    if (loadStatus) loadStatus.innerText = 'Siap! Membuka soal pertama...';
     
-    // Tunggu sebentar untuk animasi progress bar
-    setTimeout(() => {
-      qIdx = 0; 
-      
-      // Render soal pertama
-      renderQuestion(0);
-      
-      // Hitung waktu selesai
-      const startTime = new Date(waktuMulaiUjian).getTime();
-      const durasiMs = (durasiUjian * 60 * 1000);
-      endTime = startTime + durasiMs;
-      
-      // Mulai timer
-      if (timerInt) clearInterval(timerInt); 
-      timerInt = setInterval(updateTimer, 1000);
-      
-      // Mulai anti-cheat
-      startAntiCheat();
-      
-      // Tampilkan notifikasi
-      showToast(`Selamat mengerjakan! ${questions.length} soal siap.`, 'success');
-    }, 300);
+    // Tunggu sebentar untuk UI update
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    qIdx = 0; 
+    
+    // Render soal pertama - SEMUA GAMBAR SUDAH SIAP
+    renderQuestion(0);
+    
+    // Hitung waktu selesai
+    const startTime = new Date(waktuMulaiUjian).getTime();
+    const durasiMs = (durasiUjian * 60 * 1000);
+    endTime = startTime + durasiMs;
+    
+    // Mulai timer
+    if (timerInt) clearInterval(timerInt); 
+    timerInt = setInterval(updateTimer, 1000);
+    
+    // Mulai anti-cheat
+    startAntiCheat();
+    
+    // Tampilkan notifikasi
+    showToast(`✅ Siap! ${questions.length} soal dengan semua gambar telah dimuat.`, 'success');
     
   } catch (error) { 
     showToast('Error memuat soal: ' + error.message, 'error'); 
