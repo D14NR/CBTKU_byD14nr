@@ -556,23 +556,31 @@ router.post('/get-soal', async (req, res) => {
     if (!mapelRes || mapelRes.length === 0) throw new Error('Mapel Invalid');
     const mapel = mapelRes[0];
 
-    const pRes = await supabaseRequest('peserta', 'GET', { select: 'nama_peserta', id: `eq.${peserta_id}`, limit: 1 });
-    const aRes = await supabaseRequest('agenda_ujian', 'GET', { select: 'agenda_ujian', id: `eq.${agenda_id}`, limit: 1 });
+    const pRes = await supabaseRequest('peserta', 'GET', { 
+      select: 'nama_peserta', 
+      id: `eq.${peserta_id}`, 
+      limit: 1 
+    });
+    const aRes = await supabaseRequest('agenda_ujian', 'GET', { 
+      select: 'agenda_ujian', 
+      id: `eq.${agenda_id}`, 
+      limit: 1 
+    });
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
-    // AMBIL SEMUA FIELD YANG ADA DI DATABASE - HANYA FIELD YANG DIPERLUKAN
-    // Hapus gambar_a, gambar_b, gambar_c, gambar_d, gambar_e jika tidak ada di database
+    // Ambil soal berdasarkan mapel
     const soal = await supabaseRequest('bank_soal', 'GET', {
       select:
         'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
+      order: 'no_soal.asc',
       limit: 500
     });
 
+    // Cek apakah sudah ada jawaban untuk mapel ini
     const jRes = await supabaseRequest('jawaban', 'GET', {
-      select: 'id,jawaban,tgljam_mulai,status',
+      select: 'id,jawaban,tgljam_mulai,status,tgljam_login',
       id_peserta: `eq.${peserta_id}`,
       id_mapel: `eq.${mapel_id}`,
       limit: 1
@@ -580,14 +588,27 @@ router.post('/get-soal', async (req, res) => {
 
     let status = 'Baru';
     let jwbStr = '';
-    let waktuMulai = new Date().toISOString();
+    let waktuMulai = null;
+    let waktuLogin = null;
 
     if (jRes && jRes.length > 0) {
+      // Jika sudah ada record jawaban
       status = jRes[0].status === 'Selesai' ? 'Selesai' : 'Lanjut';
       jwbStr = jRes[0].jawaban || '';
       waktuMulai = jRes[0].tgljam_mulai;
+      waktuLogin = jRes[0].tgljam_login;
+      
+      console.log(`Mapel ${mapel_id}: Menggunakan waktu mulai yang ada: ${waktuMulai}`);
     } else {
+      // Jika BELUM ada record jawaban untuk mapel ini
       jwbStr = Array(soal ? soal.length : 0).fill('-').join('|');
+      
+      // PERBAIKAN: Waktu mulai UNIK untuk setiap mapel
+      waktuLogin = new Date().toISOString(); // Waktu login untuk mapel ini
+      waktuMulai = new Date().toISOString(); // Waktu mulai untuk mapel ini
+      
+      console.log(`Mapel ${mapel_id}: Membuat record baru dengan waktu mulai: ${waktuMulai}`);
+      
       await supabaseRequest('jawaban', 'POST', null, {
         id_peserta: peserta_id,
         id_agenda: agenda_id,
@@ -596,22 +617,20 @@ router.post('/get-soal', async (req, res) => {
         nama_agenda_snap: namaA,
         nama_mapel_snap: mapel.nama_mata_pelajaran,
         jawaban: jwbStr,
-        tgljam_login: waktuMulai,
-        tgljam_mulai: waktuMulai,
+        tgljam_login: waktuLogin, // Waktu login spesifik mapel
+        tgljam_mulai: waktuMulai, // Waktu mulai spesifik mapel
         status: 'Proses'
       });
     }
 
     // Log untuk debugging
-    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Jumlah soal: ${soal ? soal.length : 0}`);
-    if (soal && soal.length > 0) {
-      console.log(`[GET-SOAL] Sample soal pertama - ID: ${soal[0].id}, No Soal: ${soal[0].no_soal}`);
-    }
-
+    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Status: ${status}, Waktu Mulai: ${waktuMulai}`);
+    
     res.json({
       success: true,
       status,
       waktu_mulai: waktuMulai,
+      waktu_login: waktuLogin,
       jawaban_sebelumnya: jwbStr,
       mapel_detail: mapel,
       data_soal: soal || []
@@ -621,7 +640,6 @@ router.post('/get-soal', async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 });
-
 /**
  * POST /api/save-jawaban
  * body: { pid, aid, mid, jwb }
