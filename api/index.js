@@ -556,31 +556,23 @@ router.post('/get-soal', async (req, res) => {
     if (!mapelRes || mapelRes.length === 0) throw new Error('Mapel Invalid');
     const mapel = mapelRes[0];
 
-    const pRes = await supabaseRequest('peserta', 'GET', { 
-      select: 'nama_peserta', 
-      id: `eq.${peserta_id}`, 
-      limit: 1 
-    });
-    const aRes = await supabaseRequest('agenda_ujian', 'GET', { 
-      select: 'agenda_ujian', 
-      id: `eq.${agenda_id}`, 
-      limit: 1 
-    });
+    const pRes = await supabaseRequest('peserta', 'GET', { select: 'nama_peserta', id: `eq.${peserta_id}`, limit: 1 });
+    const aRes = await supabaseRequest('agenda_ujian', 'GET', { select: 'agenda_ujian', id: `eq.${agenda_id}`, limit: 1 });
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
-    // Ambil soal berdasarkan mapel
+    // AMBIL SEMUA FIELD YANG ADA DI DATABASE - HANYA FIELD YANG DIPERLUKAN
+    // Hapus gambar_a, gambar_b, gambar_c, gambar_d, gambar_e jika tidak ada di database
     const soal = await supabaseRequest('bank_soal', 'GET', {
       select:
         'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc',
+      order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
       limit: 500
     });
 
-    // Cek apakah sudah ada jawaban untuk mapel ini
     const jRes = await supabaseRequest('jawaban', 'GET', {
-      select: 'id,jawaban,tgljam_mulai,status,tgljam_login',
+      select: 'id,jawaban,tgljam_mulai,status',
       id_peserta: `eq.${peserta_id}`,
       id_mapel: `eq.${mapel_id}`,
       limit: 1
@@ -588,27 +580,14 @@ router.post('/get-soal', async (req, res) => {
 
     let status = 'Baru';
     let jwbStr = '';
-    let waktuMulai = null;
-    let waktuLogin = null;
+    let waktuMulai = new Date().toISOString();
 
     if (jRes && jRes.length > 0) {
-      // Jika sudah ada record jawaban
       status = jRes[0].status === 'Selesai' ? 'Selesai' : 'Lanjut';
       jwbStr = jRes[0].jawaban || '';
       waktuMulai = jRes[0].tgljam_mulai;
-      waktuLogin = jRes[0].tgljam_login;
-      
-      console.log(`Mapel ${mapel_id}: Menggunakan waktu mulai yang ada: ${waktuMulai}`);
     } else {
-      // Jika BELUM ada record jawaban untuk mapel ini
       jwbStr = Array(soal ? soal.length : 0).fill('-').join('|');
-      
-      // PERBAIKAN: Waktu mulai UNIK untuk setiap mapel
-      waktuLogin = new Date().toISOString(); // Waktu login untuk mapel ini
-      waktuMulai = new Date().toISOString(); // Waktu mulai untuk mapel ini
-      
-      console.log(`Mapel ${mapel_id}: Membuat record baru dengan waktu mulai: ${waktuMulai}`);
-      
       await supabaseRequest('jawaban', 'POST', null, {
         id_peserta: peserta_id,
         id_agenda: agenda_id,
@@ -617,20 +596,22 @@ router.post('/get-soal', async (req, res) => {
         nama_agenda_snap: namaA,
         nama_mapel_snap: mapel.nama_mata_pelajaran,
         jawaban: jwbStr,
-        tgljam_login: waktuLogin, // Waktu login spesifik mapel
-        tgljam_mulai: waktuMulai, // Waktu mulai spesifik mapel
+        tgljam_login: waktuMulai,
+        tgljam_mulai: waktuMulai,
         status: 'Proses'
       });
     }
 
     // Log untuk debugging
-    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Status: ${status}, Waktu Mulai: ${waktuMulai}`);
-    
+    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Jumlah soal: ${soal ? soal.length : 0}`);
+    if (soal && soal.length > 0) {
+      console.log(`[GET-SOAL] Sample soal pertama - ID: ${soal[0].id}, No Soal: ${soal[0].no_soal}`);
+    }
+
     res.json({
       success: true,
       status,
       waktu_mulai: waktuMulai,
-      waktu_login: waktuLogin,
       jawaban_sebelumnya: jwbStr,
       mapel_detail: mapel,
       data_soal: soal || []
@@ -640,6 +621,7 @@ router.post('/get-soal', async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 });
+
 /**
  * POST /api/save-jawaban
  * body: { pid, aid, mid, jwb }
@@ -698,414 +680,6 @@ router.post('/selesai-ujian', async (req, res) => {
   }
 });
 
-/* ==============================================
- * ENDPOINT BARU UNTUK JAWABAN GABUNGAN
- * (TAMBAHAN TANPA MENGUBAH SISTEM YANG ADA)
- * ============================================== */
-
-/**
- * POST /api/save-gabungan-jawaban
- * MENAMBAH: Simpan/update jawaban gabungan tanpa mengganggu jawaban per mapel
- */
-router.post('/save-gabungan-jawaban', async (req, res) => {
-  const { id_peserta, id_agenda, jawaban_all } = req.body || {};
-  try {
-    if (!id_peserta || !id_agenda || !jawaban_all) {
-      return res.status(400).json({ success: false, message: 'id_peserta, id_agenda, jawaban_all wajib' });
-    }
-
-    // Hitung total soal yang dijawab
-    const total_soal = jawaban_all.split('|').filter(j => j && j !== '-').length;
-
-    // Cek apakah sudah ada data gabungan
-    const existing = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id',
-      id_peserta: `eq.${id_peserta}`,
-      id_agenda: `eq.${id_agenda}`,
-      limit: 1
-    });
-
-    let result;
-    if (existing && existing.length > 0) {
-      // Update data gabungan yang sudah ada
-      result = await supabaseRequest(
-        'jawaban_gabungan',
-        'PATCH',
-        {
-          id_peserta: `eq.${id_peserta}`,
-          id_agenda: `eq.${id_agenda}`
-        },
-        {
-          jawaban_all: jawaban_all,
-          total_soal: total_soal,
-          updated_at: new Date().toISOString()
-        }
-      );
-    } else {
-      // Insert data gabungan baru
-      result = await supabaseRequest('jawaban_gabungan', 'POST', null, {
-        id_peserta: id_peserta,
-        id_agenda: id_agenda,
-        jawaban_all: jawaban_all,
-        total_soal: total_soal,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-
-    res.json({ success: true, data: result });
-  } catch (e) {
-    console.error('Error save gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/get-gabungan-jawaban?peserta_id=...&agenda_id=...
- * MENAMBAH: Ambil jawaban gabungan (tanpa mengganggu endpoint get-soal yang ada)
- */
-router.get('/get-gabungan-jawaban', async (req, res) => {
-  const { peserta_id, agenda_id } = req.query || {};
-  try {
-    if (!peserta_id || !agenda_id) {
-      return res.status(400).json({ success: false, message: 'peserta_id & agenda_id wajib' });
-    }
-
-    const data = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id,jawaban_all,total_soal,created_at,updated_at',
-      id_peserta: `eq.${peserta_id}`,
-      id_agenda: `eq.${agenda_id}`,
-      limit: 1
-    });
-
-    res.json({ 
-      success: true, 
-      data: data && data.length > 0 ? data[0] : null 
-    });
-  } catch (e) {
-    console.error('Error get gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/compile-jawaban?peserta_id=...&agenda_id=...
- * MENAMBAH: Kompilasi otomatis jawaban dari semua mapel ke format gabungan
- */
-router.get('/compile-jawaban', async (req, res) => {
-  const { peserta_id, agenda_id } = req.query || {};
-  try {
-    if (!peserta_id || !agenda_id) {
-      return res.status(400).json({ success: false, message: 'peserta_id & agenda_id wajib' });
-    }
-
-    // 1. Ambil semua mapel dalam agenda
-    const mapelList = await supabaseRequest('mata_pelajaran', 'GET', {
-      select: 'id,nama_mata_pelajaran,jumlah_soal',
-      id_agenda: `eq.${agenda_id}`,
-      status_mapel: 'eq.Siap',
-      order: 'id.asc' // Urutkan mapel berdasarkan id
-    });
-
-    if (!mapelList || mapelList.length === 0) {
-      return res.json({ success: true, jawaban_all: '', total_soal: 0, jumlah_mapel: 0 });
-    }
-
-    // 2. Array untuk menyimpan semua jawaban
-    let allJawabanArray = [];
-    let totalSoalSemuaMapel = 0;
-
-    // 3. Ambil jawaban untuk setiap mapel
-    for (const mapel of mapelList) {
-      try {
-        // Ambil jawaban dari tabel jawaban yang sudah ada
-        const jawabanData = await supabaseRequest('jawaban', 'GET', {
-          select: 'jawaban',
-          id_peserta: `eq.${peserta_id}`,
-          id_agenda: `eq.${agenda_id}`,
-          id_mapel: `eq.${mapel.id}`,
-          limit: 1
-        });
-
-        if (jawabanData && jawabanData.length > 0) {
-          const jawabanStr = jawabanData[0].jawaban || '';
-          const jawabanPerMapel = jawabanStr.split('|');
-          
-          // Tambahkan ke array gabungan
-          allJawabanArray = allJawabanArray.concat(jawabanPerMapel);
-          totalSoalSemuaMapel += jawabanPerMapel.length;
-          
-          console.log(`Mapel ${mapel.nama_mata_pelajaran}: ${jawabanPerMapel.length} soal`);
-        } else {
-          // Jika belum ada jawaban, tambahkan placeholder
-          const placeholder = Array(mapel.jumlah_soal || 0).fill('-');
-          allJawabanArray = allJawabanArray.concat(placeholder);
-          totalSoalSemuaMapel += placeholder.length;
-          
-          console.log(`Mapel ${mapel.nama_mata_pelajaran}: ${placeholder.length} soal (placeholder)`);
-        }
-      } catch (error) {
-        console.error(`Error kompilasi mapel ${mapel.id}:`, error);
-        const placeholder = Array(mapel.jumlah_soal || 0).fill('-');
-        allJawabanArray = allJawabanArray.concat(placeholder);
-        totalSoalSemuaMapel += placeholder.length;
-      }
-    }
-
-    // 4. Format jadi string
-    const jawabanAll = allJawabanArray.join('|');
-    const totalSoalDijawab = allJawabanArray.filter(j => j && j !== '-').length;
-
-    console.log(`Kompilasi selesai: ${totalSoalSemuaMapel} soal total, ${totalSoalDijawab} terjawab`);
-
-    res.json({ 
-      success: true, 
-      jawaban_all: jawabanAll,
-      total_soal: totalSoalSemuaMapel,
-      total_dijawab: totalSoalDijawab,
-      jumlah_mapel: mapelList.length,
-      kompilasi_time: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('Error compile jawaban:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/get-all-jawaban-gabungan?agenda_id=...
- * MENAMBAH: Dapatkan semua jawaban gabungan dalam satu agenda (untuk admin)
- */
-router.get('/get-all-jawaban-gabungan', async (req, res) => {
-  const { agenda_id } = req.query || {};
-  try {
-    if (!agenda_id) {
-      return res.status(400).json({ success: false, message: 'agenda_id wajib' });
-    }
-
-    const data = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id,id_peserta,id_agenda,jawaban_all,total_soal,created_at,updated_at',
-      id_agenda: `eq.${agenda_id}`,
-      order: 'id_peserta.asc'
-    });
-
-    res.json({ 
-      success: true, 
-      data: data || [],
-      total_peserta: data ? data.length : 0
-    });
-  } catch (e) {
-    console.error('Error get all gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/auto-compile-gabungan
- * MENAMBAH: Otomatis kompilasi dan simpan untuk semua peserta dalam agenda
- */
-router.post('/auto-compile-gabungan', async (req, res) => {
-  const { agenda_id } = req.body || {};
-  try {
-    if (!agenda_id) {
-      return res.status(400).json({ success: false, message: 'agenda_id wajib' });
-    }
-
-    // 1. Ambil semua peserta dalam agenda
-    const pesertaList = await supabaseRequest('peserta', 'GET', {
-      select: 'id,nama_peserta,nis_username',
-      id_agenda: `eq.${agenda_id}`,
-      status: 'eq.Aktif'
-    });
-
-    if (!pesertaList || pesertaList.length === 0) {
-      return res.json({ success: true, message: 'Tidak ada peserta dalam agenda', total: 0 });
-    }
-
-    let successCount = 0;
-    let failCount = 0;
-    const results = [];
-
-    // 2. Untuk setiap peserta, kompilasi jawaban
-    for (const peserta of pesertaList) {
-      try {
-        // Panggil endpoint compile-jawaban untuk setiap peserta
-        const compileResult = await supabaseRequest(`/compile-jawaban?peserta_id=${peserta.id}&agenda_id=${agenda_id}`, 'GET', null);
-        
-        if (compileResult && compileResult.jawaban_all) {
-          // Simpan ke tabel gabungan
-          await supabaseRequest('jawaban_gabungan', 'POST', null, {
-            id_peserta: peserta.id,
-            id_agenda: agenda_id,
-            jawaban_all: compileResult.jawaban_all,
-            total_soal: compileResult.total_soal,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-          
-          successCount++;
-          results.push({
-            peserta: peserta.nama_peserta,
-            status: 'success',
-            total_soal: compileResult.total_soal
-          });
-        } else {
-          failCount++;
-          results.push({
-            peserta: peserta.nama_peserta,
-            status: 'failed',
-            error: 'No jawaban compiled'
-          });
-        }
-      } catch (error) {
-        console.error(`Error auto compile for peserta ${peserta.id}:`, error);
-        failCount++;
-        results.push({
-          peserta: peserta.nama_peserta,
-          status: 'error',
-          error: error.message
-        });
-      }
-    }
-
-    res.json({ 
-      success: true, 
-      message: `Auto-compile selesai: ${successCount} berhasil, ${failCount} gagal`,
-      total_peserta: pesertaList.length,
-      success_count: successCount,
-      fail_count: failCount,
-      results: results
-    });
-  } catch (e) {
-    console.error('Error auto compile gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/gabungan-stats?agenda_id=...
- * MENAMBAH: Statistik jawaban gabungan
- */
-router.get('/gabungan-stats', async (req, res) => {
-  const { agenda_id } = req.query || {};
-  try {
-    if (!agenda_id) {
-      return res.status(400).json({ success: false, message: 'agenda_id wajib' });
-    }
-
-    // Ambil semua jawaban gabungan dalam agenda
-    const allJawaban = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id_peserta,jawaban_all,total_soal',
-      id_agenda: `eq.${agenda_id}`
-    });
-
-    if (!allJawaban || allJawaban.length === 0) {
-      return res.json({ 
-        success: true, 
-        stats: {
-          total_peserta: 0,
-          rata_rata_dijawab: 0,
-          min_dijawab: 0,
-          max_dijawab: 0,
-          distribusi: []
-        }
-      });
-    }
-
-    // Hitung statistik
-    const stats = {
-      total_peserta: allJawaban.length,
-      rata_rata_dijawab: 0,
-      min_dijawab: Infinity,
-      max_dijawab: 0,
-      distribusi: []
-    };
-
-    let totalDijawabSemua = 0;
-    const distribusiMap = {};
-
-    allJawaban.forEach(jawaban => {
-      const jawabanArray = jawaban.jawaban_all.split('|');
-      const dijawab = jawabanArray.filter(j => j && j !== '-').length;
-      const totalSoal = jawabanArray.length;
-      
-      totalDijawabSemua += dijawab;
-      
-      if (dijawab < stats.min_dijawab) stats.min_dijawab = dijawab;
-      if (dijawab > stats.max_dijawab) stats.max_dijawab = dijawab;
-      
-      // Hitung distribusi
-      const persentase = Math.round((dijawab / totalSoal) * 100);
-      const key = `${Math.floor(persentase / 10) * 10}-${Math.floor(persentase / 10) * 10 + 9}%`;
-      
-      if (!distribusiMap[key]) {
-        distribusiMap[key] = 0;
-      }
-      distribusiMap[key]++;
-    });
-
-    stats.rata_rata_dijawab = Math.round(totalDijawabSemua / allJawaban.length);
-    
-    // Konversi distribusiMap ke array
-    stats.distribusi = Object.keys(distribusiMap).map(key => ({
-      range: key,
-      count: distribusiMap[key],
-      percentage: Math.round((distribusiMap[key] / allJawaban.length) * 100)
-    })).sort((a, b) => a.range.localeCompare(b.range));
-
-    res.json({ 
-      success: true, 
-      stats: stats,
-      last_updated: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('Error gabungan stats:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/cleanup-gabungan
- * MENAMBAH: Bersihkan data gabungan yang tidak memiliki jawaban
- */
-router.post('/cleanup-gabungan', async (req, res) => {
-  const { agenda_id } = req.body || {};
-  try {
-    const now = new Date();
-    const oneMonthAgo = new Date(now.setMonth(now.getMonth() - 1)).toISOString();
-
-    let query = {
-      jawaban_all: `eq.`,
-      updated_at: `lt.${oneMonthAgo}`
-    };
-
-    if (agenda_id) {
-      query.id_agenda = `eq.${agenda_id}`;
-    }
-
-    // Hapus data yang kosong dan lebih dari 1 bulan
-    await supabaseRequest(
-      'jawaban_gabungan',
-      'DELETE',
-      query
-    );
-
-    res.json({ 
-      success: true, 
-      message: 'Cleanup jawaban gabungan berhasil',
-      cutoff_date: oneMonthAgo
-    });
-  } catch (e) {
-    console.error('Error cleanup gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/* ==============================================
- * ENDPOINT UTAMA YANG SUDAH ADA
- * (TIDAK ADA PERUBAHAN DI BAWAH INI)
- * ============================================== */
-
 /**
  * GET /api/health
  * Endpoint untuk cek kesehatan server
@@ -1117,19 +691,10 @@ router.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     env: {
       supabase_url: SUPABASE_URL ? 'Terisi' : 'Kosong',
-      node_env: process.env.NODE_ENV || 'development',
-      fitur_gabungan: 'Aktif'
-    },
-    endpoints: {
-      utama: ['/agenda', '/register', '/login', '/mapel', '/get-soal', '/save-jawaban', '/selesai-ujian'],
-      tambahan: ['/save-gabungan-jawaban', '/get-gabungan-jawaban', '/compile-jawaban', '/gabungan-stats']
+      node_env: process.env.NODE_ENV || 'development'
     }
   });
 });
-
-// ==============================================
-// SETUP EXPRESS
-// ==============================================
 
 app.use('/api', router);
 
@@ -1158,13 +723,6 @@ if (require.main === module) {
     console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
     console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
     console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
-    console.log(`✨ Fitur Jawaban Gabungan: AKTIF`);
-    console.log(`========================================`);
-    console.log(`📊 Endpoint Jawaban Gabungan:`);
-    console.log(`   POST /api/save-gabungan-jawaban`);
-    console.log(`   GET  /api/get-gabungan-jawaban`);
-    console.log(`   GET  /api/compile-jawaban`);
-    console.log(`   GET  /api/gabungan-stats`);
     console.log(`========================================`);
   });
 }
