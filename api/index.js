@@ -86,7 +86,7 @@ router.get('/agenda', async (req, res) => {
   try {
     const now = new Date().toISOString();
     const data = await supabaseRequest('agenda_ujian', 'GET', {
-      select: 'id,agenda_ujian,tgljam_mulai,tgljam_selesai',
+      select: 'id,agenda_ujian,tgljam_mulai,tgljam_selesai,token_ujian',
       tgljam_selesai: `gte.${now}`,
       order: 'tgljam_mulai.asc'
     });
@@ -151,16 +151,25 @@ router.post('/register', async (req, res) => {
     const resData = await supabaseRequest('peserta', 'POST', null, payload);
 
     let namaAgenda = '-';
+    let tokenAgenda = '';
     if (form.agenda_id) {
       const ag = await supabaseRequest('agenda_ujian', 'GET', {
-        select: 'agenda_ujian',
+        select: 'agenda_ujian,token_ujian',
         id: `eq.${form.agenda_id}`,
         limit: 1
       });
-      if (ag && ag.length > 0) namaAgenda = ag[0].agenda_ujian;
+      if (ag && ag.length > 0) {
+        namaAgenda = ag[0].agenda_ujian;
+        tokenAgenda = ag[0].token_ujian || '';
+      }
     }
 
-    res.json({ success: true, data: safeUser(resData?.[0]), nama_agenda: namaAgenda });
+    res.json({ 
+      success: true, 
+      data: safeUser(resData?.[0]), 
+      nama_agenda: namaAgenda,
+      token_agenda: tokenAgenda
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
@@ -199,7 +208,24 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Password salah' });
     }
 
-    res.json({ success: true, data: safeUser(user) });
+    // Dapatkan info agenda untuk token
+    let tokenAgenda = '';
+    if (user.id_agenda) {
+      const ag = await supabaseRequest('agenda_ujian', 'GET', {
+        select: 'token_ujian',
+        id: `eq.${user.id_agenda}`,
+        limit: 1
+      });
+      if (ag && ag.length > 0) {
+        tokenAgenda = ag[0].token_ujian || '';
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      data: safeUser(user),
+      token_agenda: tokenAgenda
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
@@ -513,6 +539,7 @@ router.get('/mapel', async (req, res) => {
 /**
  * POST /api/get-soal
  * body: { agenda_id, peserta_id, mapel_id }
+ * PERUBAHAN: Menambahkan field 'no_soal' ke select
  */
 router.post('/get-soal', async (req, res) => {
   const { agenda_id, peserta_id, mapel_id } = req.body || {};
@@ -534,11 +561,12 @@ router.post('/get-soal', async (req, res) => {
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
+    // AMBIL SEMUA FIELD YANG DIPERLUKAN TERMASUK 'no_soal'
     const soal = await supabaseRequest('bank_soal', 'GET', {
       select:
-        'id,pertanyaan,type_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
+        'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_a,gambar_b,gambar_c,gambar_d,gambar_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc',
+      order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
       limit: 500
     });
 
@@ -645,12 +673,51 @@ router.post('/selesai-ujian', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/health
+ * Endpoint untuk cek kesehatan server
+ */
+router.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Server berjalan dengan baik',
+    timestamp: new Date().toISOString(),
+    env: {
+      supabase_url: SUPABASE_URL ? 'Terisi' : 'Kosong',
+      node_env: process.env.NODE_ENV || 'development'
+    }
+  });
+});
+
 app.use('/api', router);
+
+// Handler untuk route yang tidak ditemukan
+app.use('*', (req, res) => {
+  res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan' });
+});
+
+// Error handler global
+app.use((err, req, res, next) => {
+  console.error('Global Error Handler:', err);
+  res.status(500).json({ 
+    success: false, 
+    message: 'Terjadi kesalahan internal server',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
 
 // Local run (tidak dipakai di Vercel serverless)
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server jalan di http://localhost:${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`========================================`);
+    console.log(`🚀 Server CBT Ujian Online`);
+    console.log(`📍 Port: ${PORT}`);
+    console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
+    console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
+    console.log(`========================================`);
+  });
 }
 
 module.exports = app;
