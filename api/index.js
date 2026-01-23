@@ -539,7 +539,7 @@ router.get('/mapel', async (req, res) => {
 /**
  * POST /api/get-soal
  * body: { agenda_id, peserta_id, mapel_id }
- * PERUBAHAN: Menambahkan field 'no_soal' ke select
+ * PERUBAHAN: Hanya ambil field yang ada di database
  */
 router.post('/get-soal', async (req, res) => {
   const { agenda_id, peserta_id, mapel_id } = req.body || {};
@@ -561,10 +561,11 @@ router.post('/get-soal', async (req, res) => {
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
-    // AMBIL SEMUA FIELD YANG DIPERLUKAN TERMASUK 'no_soal'
+    // AMBIL SEMUA FIELD YANG ADA DI DATABASE - HANYA FIELD YANG DIPERLUKAN
+    // Hapus gambar_a, gambar_b, gambar_c, gambar_d, gambar_e jika tidak ada di database
     const soal = await supabaseRequest('bank_soal', 'GET', {
       select:
-        'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_a,gambar_b,gambar_c,gambar_d,gambar_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
+        'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
       order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
       limit: 500
@@ -601,6 +602,12 @@ router.post('/get-soal', async (req, res) => {
       });
     }
 
+    // Log untuk debugging
+    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Jumlah soal: ${soal ? soal.length : 0}`);
+    if (soal && soal.length > 0) {
+      console.log(`[GET-SOAL] Sample soal pertama - ID: ${soal[0].id}, No Soal: ${soal[0].no_soal}`);
+    }
+
     res.json({
       success: true,
       status,
@@ -610,7 +617,7 @@ router.post('/get-soal', async (req, res) => {
       data_soal: soal || []
     });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /get-soal:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
