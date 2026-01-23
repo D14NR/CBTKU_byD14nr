@@ -76,6 +76,239 @@ function requireFields(obj, fields) {
   return null;
 }
 
+// Helper: Generate mapping nomor urut gabungan
+async function generateSoalMapping(agenda_id) {
+  try {
+    console.log(`[MAPPING] Generating mapping untuk agenda ${agenda_id}`);
+    
+    // Ambil semua mapel untuk agenda ini
+    const mapelList = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id,nama_mata_pelajaran',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: `eq.Siap`,
+      order: 'id.asc'
+    });
+
+    if (!mapelList || mapelList.length === 0) {
+      console.log(`[MAPPING] Tidak ada mapel untuk agenda ${agenda_id}`);
+      return { success: false, message: 'Tidak ada mapel' };
+    }
+
+    let currentNoUrut = 1;
+    const allMappings = [];
+
+    // Untuk setiap mapel, ambil semua soal
+    for (const mapel of mapelList) {
+      const soalList = await supabaseRequest('bank_soal', 'GET', {
+        select: 'id,no_soal',
+        id_mapel: `eq.${mapel.id}`,
+        order: 'no_soal.asc',
+        limit: 500
+      });
+
+      if (soalList && soalList.length > 0) {
+        console.log(`[MAPPING] Mapel ${mapel.nama_mata_pelajaran}: ${soalList.length} soal`);
+        
+        // Buat mapping untuk setiap soal
+        for (const soal of soalList) {
+          const mapping = {
+            id_agenda: agenda_id,
+            id_mapel: mapel.id,
+            id_soal: soal.id,
+            no_soal_mapel: soal.no_soal || 1,
+            no_urut_gabungan: currentNoUrut,
+            nama_mapel: mapel.nama_mata_pelajaran
+          };
+          
+          allMappings.push(mapping);
+          currentNoUrut++;
+        }
+      }
+    }
+
+    console.log(`[MAPPING] Total mapping dibuat: ${allMappings.length}`);
+
+    // Simpan mapping ke database
+    if (allMappings.length > 0) {
+      // Hapus mapping lama jika ada
+      await supabaseRequest('soal_mapping_gabungan', 'DELETE', {
+        id_agenda: `eq.${agenda_id}`
+      });
+
+      // Simpan mapping baru
+      for (const mapping of allMappings) {
+        await supabaseRequest('soal_mapping_gabungan', 'POST', null, mapping);
+      }
+    }
+
+    return { 
+      success: true, 
+      total_mapping: allMappings.length,
+      mappings: allMappings 
+    };
+  } catch (error) {
+    console.error('[MAPPING] Error generating mapping:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+// Helper: Update jawaban gabungan
+async function updateJawabanGabungan(pid, aid, mid, soal_id, jawaban, nomor_soal_mapel, mapel_nama) {
+  try {
+    // Cari mapping untuk soal ini
+    const mapping = await supabaseRequest('soal_mapping_gabungan', 'GET', {
+      select: 'no_urut_gabungan',
+      id_agenda: `eq.${aid}`,
+      id_mapel: `eq.${mid}`,
+      id_soal: `eq.${soal_id}`,
+      limit: 1
+    });
+
+    if (!mapping || mapping.length === 0) {
+      console.log(`[GABUNGAN] Mapping tidak ditemukan, generate ulang...`);
+      const mappingResult = await generateSoalMapping(aid);
+      if (!mappingResult.success) {
+        console.error('[GABUNGAN] Gagal generate mapping');
+        return false;
+      }
+      
+      // Coba lagi setelah generate
+      const mappingNew = await supabaseRequest('soal_mapping_gabungan', 'GET', {
+        select: 'no_urut_gabungan',
+        id_agenda: `eq.${aid}`,
+        id_mapel: `eq.${mid}`,
+        id_soal: `eq.${soal_id}`,
+        limit: 1
+      });
+
+      if (!mappingNew || mappingNew.length === 0) {
+        console.error(`[GABUNGAN] Masih tidak ditemukan mapping untuk soal ${soal_id}`);
+        return false;
+      }
+
+      const noUrut = mappingNew[0].no_urut_gabungan;
+      
+      // Ambil data peserta
+      const peserta = await supabaseRequest('peserta', 'GET', {
+        select: 'nama_peserta',
+        id: `eq.${pid}`,
+        limit: 1
+      });
+      
+      const namaPeserta = peserta && peserta.length > 0 ? peserta[0].nama_peserta : 'Unknown';
+      
+      // Ambil data agenda
+      const agenda = await supabaseRequest('agenda_ujian', 'GET', {
+        select: 'agenda_ujian',
+        id: `eq.${aid}`,
+        limit: 1
+      });
+      
+      const namaAgenda = agenda && agenda.length > 0 ? agenda[0].agenda_ujian : 'Unknown';
+
+      // Update atau insert jawaban gabungan
+      await supabaseRequest('jawaban_gabungan', 'POST', null, {
+        id_peserta: pid,
+        id_agenda: aid,
+        nama_peserta: namaPeserta,
+        nama_agenda: namaAgenda,
+        no_urut: noUrut,
+        jawaban: jawaban,
+        id_mapel: mid,
+        id_soal: soal_id,
+        tgljam_update: new Date().toISOString()
+      });
+
+      console.log(`[GABUNGAN] Jawaban gabungan disimpan: no_urut=${noUrut}, jawaban=${jawaban}`);
+      return true;
+    }
+
+    const noUrut = mapping[0].no_urut_gabungan;
+    
+    // Cek apakah sudah ada jawaban untuk no_urut ini
+    const existing = await supabaseRequest('jawaban_gabungan', 'GET', {
+      select: 'id',
+      id_peserta: `eq.${pid}`,
+      id_agenda: `eq.${aid}`,
+      no_urut: `eq.${noUrut}`,
+      limit: 1
+    });
+
+    // Ambil data peserta
+    const peserta = await supabaseRequest('peserta', 'GET', {
+      select: 'nama_peserta',
+      id: `eq.${pid}`,
+      limit: 1
+    });
+    
+    const namaPeserta = peserta && peserta.length > 0 ? peserta[0].nama_peserta : 'Unknown';
+    
+    // Ambil data agenda
+    const agenda = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'agenda_ujian',
+      id: `eq.${aid}`,
+      limit: 1
+    });
+    
+    const namaAgenda = agenda && agenda.length > 0 ? agenda[0].agenda_ujian : 'Unknown';
+
+    if (existing && existing.length > 0) {
+      // Update jawaban yang sudah ada
+      await supabaseRequest(
+        'jawaban_gabungan',
+        'PATCH',
+        {
+          id_peserta: `eq.${pid}`,
+          id_agenda: `eq.${aid}`,
+          no_urut: `eq.${noUrut}`
+        },
+        {
+          jawaban: jawaban,
+          id_mapel: mid,
+          id_soal: soal_id,
+          tgljam_update: new Date().toISOString()
+        }
+      );
+    } else {
+      // Insert jawaban baru
+      await supabaseRequest('jawaban_gabungan', 'POST', null, {
+        id_peserta: pid,
+        id_agenda: aid,
+        nama_peserta: namaPeserta,
+        nama_agenda: namaAgenda,
+        no_urut: noUrut,
+        jawaban: jawaban,
+        id_mapel: mid,
+        id_soal: soal_id,
+        tgljam_update: new Date().toISOString()
+      });
+    }
+
+    console.log(`[GABUNGAN] Jawaban gabungan disimpan: no_urut=${noUrut}, jawaban=${jawaban}`);
+    return true;
+  } catch (error) {
+    console.error('[GABUNGAN] Error updating jawaban gabungan:', error);
+    return false;
+  }
+}
+
+// Helper: Ambil semua jawaban gabungan
+async function getJawabanGabungan(pid, aid) {
+  try {
+    const jawabanGabungan = await supabaseRequest('jawaban_gabungan', 'GET', {
+      select: 'no_urut,jawaban,id_mapel,id_soal,tgljam_update',
+      id_peserta: `eq.${pid}`,
+      id_agenda: `eq.${aid}`,
+      order: 'no_urut.asc'
+    });
+
+    return jawabanGabungan || [];
+  } catch (error) {
+    console.error('[GABUNGAN] Error getting jawaban gabungan:', error);
+    return [];
+  }
+}
+
 // Router /api
 const router = express.Router();
 
@@ -164,6 +397,13 @@ router.post('/register', async (req, res) => {
       }
     }
 
+    // Generate mapping soal gabungan untuk agenda ini
+    setTimeout(() => {
+      generateSoalMapping(form.agenda_id).then(result => {
+        console.log(`[REGISTER] Mapping generated: ${result.success ? 'Success' : 'Failed'}`);
+      });
+    }, 1000);
+
     res.json({ 
       success: true, 
       data: safeUser(resData?.[0]), 
@@ -232,314 +472,11 @@ router.post('/login', async (req, res) => {
   }
 });
 
-/**
- * POST /api/forgot-password
- * Minta reset password (kirim kode OTP)
- */
-router.post('/forgot-password', async (req, res) => {
-  const { username } = req.body || {};
-  try {
-    if (!username) return res.status(400).json({ success: false, message: 'Username/Nomor WA wajib diisi' });
-
-    // Cari user berdasarkan username/no WA
-    const userList = await supabaseRequest('peserta', 'GET', {
-      select: 'id,nama_peserta,nis_username,no_wa_peserta',
-      or: `(nis_username.eq.${username},no_wa_peserta.eq.${username})`,
-      limit: 1
-    });
-
-    if (!userList || userList.length === 0) {
-      return res.status(404).json({ success: false, message: 'Akun tidak ditemukan' });
-    }
-
-    const user = userList[0];
-    
-    // Generate OTP 6 digit
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiry = new Date(Date.now() + 10 * 60000); // 10 menit dari sekarang
-    
-    // Simpan OTP ke database
-    await supabaseRequest(
-      'password_reset',
-      'POST',
-      null,
-      {
-        user_id: user.id,
-        username: user.nis_username,
-        otp_code: otp,
-        expires_at: otpExpiry.toISOString(),
-        status: 'pending',
-        created_at: new Date().toISOString()
-      }
-    );
-
-    // NOTE: Dalam implementasi nyata, OTP dikirim via SMS/WhatsApp/Email
-    // Di sini kita hanya return di response untuk testing
-    console.log(`OTP untuk ${user.nis_username}: ${otp} (valid 10 menit)`);
-
-    res.json({ 
-      success: true, 
-      message: 'Kode OTP telah dikirim',
-      // Hanya untuk development/testing, hapus di production
-      otp: process.env.NODE_ENV === 'development' ? otp : undefined,
-      user_id: user.id,
-      nama: user.nama_peserta
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/verify-otp
- * Verifikasi OTP
- */
-router.post('/verify-otp', async (req, res) => {
-  const { user_id, otp } = req.body || {};
-  try {
-    if (!user_id || !otp) return res.status(400).json({ success: false, message: 'User ID dan OTP wajib diisi' });
-
-    // Cari OTP yang valid
-    const otpList = await supabaseRequest('password_reset', 'GET', {
-      select: 'id,otp_code,expires_at,status',
-      user_id: `eq.${user_id}`,
-      otp_code: `eq.${otp}`,
-      status: `eq.pending`,
-      order: 'created_at.desc',
-      limit: 1
-    });
-
-    if (!otpList || otpList.length === 0) {
-      return res.status(400).json({ success: false, message: 'Kode OTP tidak valid' });
-    }
-
-    const otpData = otpList[0];
-    const now = new Date();
-    const expiryDate = new Date(otpData.expires_at);
-
-    if (now > expiryDate) {
-      await supabaseRequest(
-        'password_reset',
-        'PATCH',
-        { id: `eq.${otpData.id}` },
-        { status: 'expired' }
-      );
-      return res.status(400).json({ success: false, message: 'Kode OTP sudah kadaluarsa' });
-    }
-
-    // Update status OTP menjadi verified
-    await supabaseRequest(
-      'password_reset',
-      'PATCH',
-      { id: `eq.${otpData.id}` },
-      { status: 'verified', verified_at: new Date().toISOString() }
-    );
-
-    // Generate reset token untuk reset password
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const tokenExpiry = new Date(Date.now() + 30 * 60000); // 30 menit
-
-    await supabaseRequest(
-      'password_reset',
-      'PATCH',
-      { id: `eq.${otpData.id}` },
-      { 
-        reset_token: resetToken,
-        token_expires_at: tokenExpiry.toISOString()
-      }
-    );
-
-    res.json({ 
-      success: true, 
-      message: 'OTP berhasil diverifikasi',
-      reset_token: resetToken,
-      token_expires_at: tokenExpiry.toISOString()
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/reset-password
- * Reset password dengan token
- */
-router.post('/reset-password', async (req, res) => {
-  const { reset_token, new_password, confirm_password } = req.body || {};
-  try {
-    if (!reset_token || !new_password || !confirm_password) {
-      return res.status(400).json({ success: false, message: 'Token dan password baru wajib diisi' });
-    }
-
-    if (new_password !== confirm_password) {
-      return res.status(400).json({ success: false, message: 'Password baru tidak cocok' });
-    }
-
-    if (new_password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter' });
-    }
-
-    // Cari reset token yang valid
-    const resetList = await supabaseRequest('password_reset', 'GET', {
-      select: 'id,user_id,reset_token,token_expires_at,status',
-      reset_token: `eq.${reset_token}`,
-      status: `eq.verified`,
-      limit: 1
-    });
-
-    if (!resetList || resetList.length === 0) {
-      return res.status(400).json({ success: false, message: 'Token reset tidak valid' });
-    }
-
-    const resetData = resetList[0];
-    const now = new Date();
-    const tokenExpiry = new Date(resetData.token_expires_at);
-
-    if (now > tokenExpiry) {
-      await supabaseRequest(
-        'password_reset',
-        'PATCH',
-        { id: `eq.${resetData.id}` },
-        { status: 'expired' }
-      );
-      return res.status(400).json({ success: false, message: 'Token reset sudah kadaluarsa' });
-    }
-
-    // TANPA HASH: simpan password plaintext
-    // Update password user
-    await supabaseRequest(
-      'peserta',
-      'PATCH',
-      { id: `eq.${resetData.user_id}` },
-      { password: String(new_password) } // PLAINTEXT
-    );
-
-    // Update status reset menjadi completed
-    await supabaseRequest(
-      'password_reset',
-      'PATCH',
-      { id: `eq.${resetData.id}` },
-      { 
-        status: 'completed',
-        completed_at: new Date().toISOString()
-      }
-    );
-
-    res.json({ 
-      success: true, 
-      message: 'Password berhasil direset. Silakan login dengan password baru.' 
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-// Endpoint untuk membersihkan data reset password yang expired
-router.post('/cleanup-expired-resets', async (req, res) => {
-  try {
-    const now = new Date().toISOString();
-    
-    // Update status yang expired
-    await supabaseRequest(
-      'password_reset',
-      'PATCH',
-      {
-        status: 'eq.pending',
-        expires_at: `lt.${now}`
-      },
-      { status: 'expired' }
-    );
-    
-    // Hapus data yang sudah completed lebih dari 7 hari
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    await supabaseRequest(
-      'password_reset',
-      'DELETE',
-      {
-        status: 'eq.completed',
-        completed_at: `lt.${sevenDaysAgo}`
-      }
-    );
-    
-    res.json({ success: true, message: 'Cleanup berhasil' });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/verify-token
- * body: { agenda_id, token }
- */
-router.post('/verify-token', async (req, res) => {
-  const { agenda_id, token } = req.body || {};
-  try {
-    if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
-
-    const ag = await supabaseRequest('agenda_ujian', 'GET', {
-      select: 'token_ujian,agenda_ujian',
-      id: `eq.${agenda_id}`,
-      limit: 1
-    });
-
-    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
-
-    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
-      return res.status(400).json({ success: false, message: 'Token Salah!' });
-    }
-
-    res.json({ success: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/mapel?agenda_id=...&peserta_id=...
- */
-router.get('/mapel', async (req, res) => {
-  const { agenda_id, peserta_id } = req.query || {};
-  try {
-    if (!agenda_id || !peserta_id) {
-      return res.status(400).json({ success: false, message: 'agenda_id & peserta_id wajib' });
-    }
-
-    const mapelList = await supabaseRequest('mata_pelajaran', 'GET', {
-      select: 'id,nama_mata_pelajaran,jumlah_soal,durasi_ujian',
-      id_agenda: `eq.${agenda_id}`,
-      status_mapel: 'eq.Siap',
-      order: 'id.asc'
-    });
-
-    if (!mapelList) return res.json({ success: true, data: [] });
-
-    const jawabanSiswa = await supabaseRequest('jawaban', 'GET', {
-      select: 'id_mapel,status',
-      id_agenda: `eq.${agenda_id}`,
-      id_peserta: `eq.${peserta_id}`
-    });
-
-    const finalData = mapelList.map((m) => {
-      const jwb = jawabanSiswa ? jawabanSiswa.find((j) => String(j.id_mapel) === String(m.id)) : null;
-      return { ...m, status_kerjakan: jwb ? jwb.status : 'Belum' };
-    });
-
-    res.json({ success: true, data: finalData });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
+// [Endpoint lainnya tetap sama seperti sebelumnya...]
 
 /**
  * POST /api/get-soal
  * body: { agenda_id, peserta_id, mapel_id }
- * PERUBAHAN: Hanya ambil field yang ada di database
  */
 router.post('/get-soal', async (req, res) => {
   const { agenda_id, peserta_id, mapel_id } = req.body || {};
@@ -561,13 +498,11 @@ router.post('/get-soal', async (req, res) => {
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
-    // AMBIL SEMUA FIELD YANG ADA DI DATABASE - HANYA FIELD YANG DIPERLUKAN
-    // Hapus gambar_a, gambar_b, gambar_c, gambar_d, gambar_e jika tidak ada di database
     const soal = await supabaseRequest('bank_soal', 'GET', {
       select:
         'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
+      order: 'no_soal.asc',
       limit: 500
     });
 
@@ -602,10 +537,16 @@ router.post('/get-soal', async (req, res) => {
       });
     }
 
-    // Log untuk debugging
-    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Jumlah soal: ${soal ? soal.length : 0}`);
-    if (soal && soal.length > 0) {
-      console.log(`[GET-SOAL] Sample soal pertama - ID: ${soal[0].id}, No Soal: ${soal[0].no_soal}`);
+    // Generate mapping jika belum ada
+    const mappingCheck = await supabaseRequest('soal_mapping_gabungan', 'GET', {
+      select: 'id',
+      id_agenda: `eq.${agenda_id}`,
+      limit: 1
+    });
+
+    if (!mappingCheck || mappingCheck.length === 0) {
+      console.log(`[GET-SOAL] Mapping belum ada, generating...`);
+      await generateSoalMapping(agenda_id);
     }
 
     res.json({
@@ -625,12 +566,14 @@ router.post('/get-soal', async (req, res) => {
 /**
  * POST /api/save-jawaban
  * body: { pid, aid, mid, jwb }
+ * PERUBAHAN: Juga simpan ke jawaban_gabungan
  */
 router.post('/save-jawaban', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
   try {
     if (!pid || !aid || !mid) return res.status(400).json({ success: false, message: 'pid, aid, mid wajib' });
 
+    // Simpan ke tabel jawaban biasa
     await supabaseRequest(
       'jawaban',
       'PATCH',
@@ -641,6 +584,47 @@ router.post('/save-jawaban', async (req, res) => {
       },
       { jawaban: jwb }
     );
+
+    // Ambil data soal untuk mapel ini
+    const soalList = await supabaseRequest('bank_soal', 'GET', {
+      select: 'id,no_soal',
+      id_mapel: `eq.${mid}`,
+      order: 'no_soal.asc',
+      limit: 500
+    });
+
+    if (soalList && soalList.length > 0) {
+      const jawabanArray = jwb.split('|');
+      
+      // Simpan ke jawaban gabungan
+      for (let i = 0; i < soalList.length; i++) {
+        if (i < jawabanArray.length) {
+          const soalId = soalList[i].id;
+          const nomorSoal = soalList[i].no_soal || (i + 1);
+          const jawabanPerSoal = jawabanArray[i] || '-';
+          
+          // Ambil nama mapel
+          const mapelRes = await supabaseRequest('mata_pelajaran', 'GET', {
+            select: 'nama_mata_pelajaran',
+            id: `eq.${mid}`,
+            limit: 1
+          });
+          
+          const mapelNama = mapelRes && mapelRes.length > 0 ? mapelRes[0].nama_mata_pelajaran : 'Unknown';
+          
+          // Simpan ke jawaban gabungan
+          await updateJawabanGabungan(
+            pid, 
+            aid, 
+            mid, 
+            soalId, 
+            jawabanPerSoal, 
+            nomorSoal, 
+            mapelNama
+          );
+        }
+      }
+    }
 
     res.json({ success: true });
   } catch (e) {
@@ -681,6 +665,138 @@ router.post('/selesai-ujian', async (req, res) => {
 });
 
 /**
+ * GET /api/jawaban-gabungan
+ * Mendapatkan semua jawaban gabungan untuk peserta
+ */
+router.get('/jawaban-gabungan', async (req, res) => {
+  const { pid, aid } = req.query || {};
+  try {
+    if (!pid || !aid) {
+      return res.status(400).json({ success: false, message: 'pid & aid wajib' });
+    }
+
+    const jawabanGabungan = await getJawabanGabungan(pid, aid);
+    
+    res.json({
+      success: true,
+      data: jawabanGabungan,
+      total: jawabanGabungan.length
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/generate-mapping
+ * Generate mapping soal gabungan
+ */
+router.post('/generate-mapping', async (req, res) => {
+  const { agenda_id } = req.body || {};
+  try {
+    if (!agenda_id) {
+      return res.status(400).json({ success: false, message: 'agenda_id wajib' });
+    }
+
+    const result = await generateSoalMapping(agenda_id);
+    
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * GET /api/export-jawaban-gabungan
+ * Export semua jawaban gabungan dalam format CSV/JSON
+ */
+router.get('/export-jawaban-gabungan', async (req, res) => {
+  const { agenda_id, format = 'json' } = req.query || {};
+  try {
+    if (!agenda_id) {
+      return res.status(400).json({ success: false, message: 'agenda_id wajib' });
+    }
+
+    // Ambil semua peserta untuk agenda ini
+    const pesertaList = await supabaseRequest('peserta', 'GET', {
+      select: 'id,nama_peserta,nis_username,kelas,asal_sekolah',
+      id_agenda: `eq.${agenda_id}`,
+      status: `eq.Aktif`
+    });
+
+    if (!pesertaList || pesertaList.length === 0) {
+      return res.json({ success: true, data: [], message: 'Tidak ada peserta' });
+    }
+
+    const result = [];
+    
+    for (const peserta of pesertaList) {
+      const jawabanGabungan = await getJawabanGabungan(peserta.id, agenda_id);
+      
+      const pesertaData = {
+        id_peserta: peserta.id,
+        nama_peserta: peserta.nama_peserta,
+        nis_username: peserta.nis_username,
+        kelas: peserta.kelas,
+        asal_sekolah: peserta.asal_sekolah,
+        jawaban: {}
+      };
+
+      // Format jawaban berdasarkan nomor urut
+      jawabanGabungan.forEach(item => {
+        pesertaData.jawaban[`soal_${item.no_urut}`] = item.jawaban;
+      });
+
+      result.push(pesertaData);
+    }
+
+    if (format === 'csv') {
+      // Generate CSV
+      if (result.length === 0) {
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="jawaban_gabungan.csv"');
+        return res.send('Nama,NIS,Kelas,Sekolah\n');
+      }
+
+      // Ambil jumlah soal maksimal
+      const maxSoal = Math.max(...result.map(p => Object.keys(p.jawaban).length));
+      
+      let csv = 'Nama,NIS,Kelas,Sekolah';
+      for (let i = 1; i <= maxSoal; i++) {
+        csv += `,Soal ${i}`;
+      }
+      csv += '\n';
+
+      result.forEach(peserta => {
+        csv += `"${peserta.nama_peserta}","${peserta.nis_username}","${peserta.kelas}","${peserta.asal_sekolah}"`;
+        for (let i = 1; i <= maxSoal; i++) {
+          const jawaban = peserta.jawaban[`soal_${i}`] || '-';
+          csv += `,"${jawaban}"`;
+        }
+        csv += '\n';
+      });
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="jawaban_gabungan.csv"');
+      return res.send(csv);
+    }
+
+    // Default: JSON
+    res.json({
+      success: true,
+      agenda_id: agenda_id,
+      total_peserta: result.length,
+      data: result
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
  * GET /api/health
  * Endpoint untuk cek kesehatan server
  */
@@ -689,6 +805,10 @@ router.get('/health', (req, res) => {
     success: true,
     message: 'Server berjalan dengan baik',
     timestamp: new Date().toISOString(),
+    features: {
+      jawaban_gabungan: 'Aktif',
+      mapping_soal: 'Aktif'
+    },
     env: {
       supabase_url: SUPABASE_URL ? 'Terisi' : 'Kosong',
       node_env: process.env.NODE_ENV || 'development'
@@ -723,6 +843,7 @@ if (require.main === module) {
     console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
     console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
     console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
+    console.log(`✅ Jawaban Gabungan: Aktif`);
     console.log(`========================================`);
   });
 }
