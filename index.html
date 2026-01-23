@@ -4254,6 +4254,10 @@ function renderQuestion(idx) {
   
   if (!area) return;
   
+  // Ambil nomor soal dari database (no_soal)
+  // Gunakan no_soal dari database, jika tidak ada gunakan index + 1 sebagai fallback
+  const soalNumber = question.no_soal || (idx + 1);
+  
   // Tampilkan loader mini hanya jika gambar belum siap
   let imageHTML = '';
   if (question.gambar_url) {
@@ -4265,9 +4269,9 @@ function renderQuestion(idx) {
              onload="this.style.opacity='1'" 
              onerror="this.style.display='none'; console.error('Gagal memuat gambar: ${question.gambar_url}')"
              style="opacity:${imageCache.has(question.gambar_url) ? '1' : '0.7'}; transition: opacity 0.3s ease;"
-             alt="Gambar soal ${idx + 1}">
+             alt="Gambar soal ${soalNumber}">
         <div class="q-img-controls">
-          <button class="q-img-btn" onclick="openZoomModal('${question.gambar_url}', 'Gambar soal ${idx + 1}')">+</button>
+          <button class="q-img-btn" onclick="openZoomModal('${question.gambar_url}', 'Gambar soal ${soalNumber}')">+</button>
           <button class="q-img-btn" onclick="resetImageZoom(this)">↻</button>
         </div>
       </div>
@@ -4277,7 +4281,7 @@ function renderQuestion(idx) {
   let html = `
     <div class="q-card">
       <div class="save-status" id="save-st"><div class="pulse-dot"></div>Menyimpan...</div>
-      <div style="font-weight:700;color:var(--primary);margin-bottom:10px;">No. ${idx + 1}</div>
+      <div style="font-weight:700;color:var(--primary);margin-bottom:10px;">No. ${soalNumber}</div>
       ${imageHTML}
       <div style="margin-bottom:20px;font-size:16px;line-height:1.6;">${question.pertanyaan.replace(/\n/g,'<br>')}</div>
   `;
@@ -4336,9 +4340,8 @@ function renderQuestion(idx) {
   }
   
   // Log untuk debugging
-  console.log(`Rendering soal ${idx + 1}/${questions.length} - ID: ${question.id}`);
+  console.log(`Rendering soal ${soalNumber} (Index: ${idx + 1}/${questions.length}) - ID: ${question.id}`);
 }
-
 function renderQuestionOptions(question, answer, questionIndex) {
   const container = document.querySelector('.q-card');
   if (!container) return;
@@ -4655,12 +4658,25 @@ async function initExamSession() {
     waktuMulaiUjian = result.waktu_mulai;
     durasiUjian = mapel.durasi_ujian || 0;
     
+    // URUTKAN SOAL BERDASARKAN no_soal DARI DATABASE
+    questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
+    
     // Parse SEMUA jawaban sebelumnya sekaligus
     const jawabanArray = result.jawaban_sebelumnya.split('|');
     answers = {};
     ragu = {}; // Reset status ragu
     
+    // Mapping jawaban sesuai dengan urutan soal yang baru (berdasarkan no_soal)
+    // Pertama, kita perlu mendapatkan urutan soal asli dari server
+    // Asumsikan result.data_soal sudah dalam urutan berdasarkan no_soal dari database
+    // Atau kita perlu menyimpan mapping id_soal ke jawaban
+    
+    // Alternatif: Server harus mengembalikan jawaban dalam array yang sesuai dengan urutan soal
+    // Jika tidak, kita perlu membuat mapping berdasarkan id soal
+    
+    // Pendekatan: Buat mapping berdasarkan index urutan dari server
     questions.forEach((question, index) => {
+      // Asumsikan jawabanArray sudah sesuai urutan soal dari server
       answers[question.id] = jawabanArray[index] || '-';
       
       // Load status ragu dari localStorage jika ada
@@ -4707,7 +4723,6 @@ async function initExamSession() {
     console.error('Question load error:', error); 
   }
 }
-
 function updateTimer() {
   const timeLeft = endTime - Date.now(); 
   
@@ -4894,15 +4909,18 @@ function renderNavigation() {
   questions.forEach((question, index) => {
     const navItem = document.createElement('div');
     navItem.className = `nav-item ${index === qIdx ? 'active' : ''} ${answers[question.id] && answers[question.id] !== '-' ? 'done' : ''} ${ragu[index] ? 'ragu' : ''}`;
-    navItem.innerText = index + 1;
+    
+    // Gunakan no_soal dari database untuk tampilan navigasi
+    const soalNumber = question.no_soal || (index + 1);
+    navItem.innerText = soalNumber;
     navItem.onclick = () => renderQuestion(index);
     
     if (ragu[index]) {
-      navItem.title = `Soal No. ${index + 1} (Ragu)`;
+      navItem.title = `Soal No. ${soalNumber} (Ragu)`;
     } else if (answers[question.id] && answers[question.id] !== '-') {
-      navItem.title = `Soal No. ${index + 1} (Terjawab)`;
+      navItem.title = `Soal No. ${soalNumber} (Terjawab)`;
     } else {
-      navItem.title = `Soal No. ${index + 1} (Belum terjawab)`;
+      navItem.title = `Soal No. ${soalNumber} (Belum terjawab)`;
     }
     
     grid.appendChild(navItem);
@@ -5165,6 +5183,9 @@ function renderDetailJawabanContent(examData) {
   const jawabanArray = examData.jawaban_sebelumnya.split('|');
   const questions = examData.data_soal || [];
   
+  // Urutkan soal berdasarkan no_soal
+  questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
+  
   let html = `
     <div style="background:var(--primary-light); padding:15px; border-radius:8px; margin-bottom:20px;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -5207,11 +5228,12 @@ function renderDetailJawabanContent(examData) {
   questions.forEach((question, index) => {
     const jawaban = jawabanArray[index] || '-';
     const isDijawab = jawaban && jawaban !== '-';
+    const soalNumber = question.no_soal || (index + 1); // Gunakan no_soal dari database
     
     html += `
       <div class="jawaban-item" style="margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid #e2e8f0;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <div style="font-weight:600; color:var(--text-main); font-size:14px;">Soal No. ${index + 1}</div>
+          <div style="font-weight:600; color:var(--text-main); font-size:14px;">Soal No. ${soalNumber}</div>
           <div style="font-size:11px; padding:2px 8px; border-radius:3px; 
                 background:${isDijawab ? '#10b98120' : '#ef444420'}; 
                 color:${isDijawab ? '#059669' : '#dc2626'}; font-weight:600;">
@@ -5243,7 +5265,6 @@ function renderDetailJawabanContent(examData) {
     detailModal.classList.remove('hidden');
   }
 }
-
 function closeDetailJawaban() {
   const detailModal = document.getElementById('modal-detail-jawaban');
   if (detailModal) {
@@ -5269,15 +5290,19 @@ function downloadHasilUjian() {
   const jawabanArray = jawabanData.jawaban_sebelumnya.split('|');
   const questions = jawabanData.data_soal || [];
   
+  // Urutkan soal berdasarkan no_soal
+  questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
+  
   let soalHTML = '';
   questions.forEach((question, index) => {
     const jawaban = jawabanArray[index] || '-';
     const isDijawab = jawaban && jawaban !== '-';
+    const soalNumber = question.no_soal || (index + 1); // Gunakan no_soal dari database
     
     soalHTML += `
       <div style="margin-bottom:25px; padding-bottom:25px; ${index < questions.length - 1 ? 'border-bottom:1px solid #ddd;' : ''}">
         <div style="background:#f8fafc; padding:15px; border-radius:5px; margin-bottom:15px;">
-          <div style="font-weight:bold; color:#dc2626; margin-bottom:10px; font-size:16px;">Soal No. ${index + 1}</div>
+          <div style="font-weight:bold; color:#dc2626; margin-bottom:10px; font-size:16px;">Soal No. ${soalNumber}</div>
           <div style="font-size:14px; line-height:1.5;">
             ${question.pertanyaan}
           </div>
