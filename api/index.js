@@ -3,7 +3,6 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const crypto = require('crypto');
 
 dotenv.config();
 const app = express();
@@ -21,7 +20,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.warn('[WARN] SUPABASE_URL / SUPABASE_KEY belum diset.');
 }
 
-// Helper: request ke Supabase REST
+// Helper: request ke Supabase REST (FIXED untuk UUID)
 async function supabaseRequest(path, method = 'GET', query = null, body = null) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error('Server belum dikonfigurasi: SUPABASE_URL / SUPABASE_KEY kosong.');
@@ -31,7 +30,15 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
 
   if (query) {
     for (const [k, v] of Object.entries(query)) {
-      url.searchParams.set(k, String(v));
+      // Handle UUID dan string dengan benar
+      if (typeof v === 'string' && v.includes('.')) {
+        // Ini adalah operator dengan titik (eq., gt., etc)
+        url.searchParams.set(k, v);
+      } else {
+        // Quote string values untuk UUID
+        const value = typeof v === 'string' ? `"${v}"` : String(v);
+        url.searchParams.set(k, value);
+      }
     }
   }
 
@@ -54,6 +61,7 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
 
     if (!response.ok) {
       const errorBody = await response.text();
+      console.error(`Supabase Error (${response.status}):`, errorBody);
       throw new Error(`DB Error (${response.status}): ${errorBody}`);
     }
 
@@ -133,26 +141,7 @@ async function initJawabanGabungan(pid, aid) {
 
     console.log(`[GABUNGAN] Total soal gabungan: ${totalSoal}`);
 
-    // 3. Simpan mapping ke database (jika belum ada)
-    if (soalMappings.length > 0) {
-      // Hanya simpan jika belum ada mapping untuk agenda ini
-      const existingMapping = await supabaseRequest('soal_mapping_gabungan', 'GET', {
-        select: 'id',
-        id_agenda: `eq.${aid}`,
-        limit: 1
-      });
-
-      if (!existingMapping || existingMapping.length === 0) {
-        console.log(`[GABUNGAN] Menyimpan ${soalMappings.length} mapping...`);
-        for (const mapping of soalMappings) {
-          await supabaseRequest('soal_mapping_gabungan', 'POST', null, mapping);
-        }
-      } else {
-        console.log(`[GABUNGAN] Mapping sudah ada untuk agenda ${aid}`);
-      }
-    }
-
-    // 4. Inisialisasi jawaban gabungan dengan string kosong
+    // 3. Inisialisasi jawaban gabungan dengan string kosong
     const jawabanAwal = Array(totalSoal).fill('-').join('|');
     
     // Cek apakah sudah ada jawaban gabungan
@@ -209,34 +198,7 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
 
     const jawabanArray = jawabanMapelString.split('|');
     
-    // 2. Ambil mapping untuk mapel ini
-    const mappingList = await supabaseRequest('soal_mapping_gabungan', 'GET', {
-      select: 'id_soal,no_urut_gabungan',
-      id_agenda: `eq.${aid}`,
-      id_mapel: `eq.${mid}`,
-      order: 'no_urut_gabungan.asc'
-    });
-
-    if (!mappingList || mappingList.length === 0) {
-      console.log(`[GABUNGAN] Mapping tidak ditemukan, init dulu...`);
-      const initResult = await initJawabanGabungan(pid, aid);
-      if (!initResult.success) return false;
-      
-      // Coba ambil mapping lagi
-      const mappingListNew = await supabaseRequest('soal_mapping_gabungan', 'GET', {
-        select: 'id_soal,no_urut_gabungan',
-        id_agenda: `eq.${aid}`,
-        id_mapel: `eq.${mid}`,
-        order: 'no_urut_gabungan.asc'
-      });
-      
-      if (!mappingListNew || mappingListNew.length === 0) {
-        console.error(`[GABUNGAN] Masih tidak ada mapping setelah init`);
-        return false;
-      }
-    }
-
-    // 3. Ambil jawaban gabungan saat ini
+    // 2. Ambil jawaban gabungan saat ini
     const jawabanGabungan = await supabaseRequest('jawaban_gabungan', 'GET', {
       select: 'id,jawaban,total_soal',
       id_peserta: `eq.${pid}`,
@@ -261,27 +223,22 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
         console.error(`[GABUNGAN] Masih tidak ada jawaban gabungan setelah init`);
         return false;
       }
+      jawabanGabungan = jawabanGabunganNew;
     }
 
     const jawabanGabunganData = jawabanGabungan[0];
     let jawabanGabunganArray = jawabanGabunganData.jawaban.split('|');
 
-    // 4. Update jawaban untuk setiap soal di mapel ini
+    // 3. Update jawaban untuk setiap soal di mapel ini
     for (let i = 0; i < soalList.length; i++) {
-      const soalId = soalList[i].id;
       const jawaban = i < jawabanArray.length ? jawabanArray[i] : '-';
-      
-      // Cari mapping untuk soal ini
-      const mapping = mappingList.find(m => String(m.id_soal) === String(soalId));
-      if (mapping) {
-        const index = mapping.no_urut_gabungan - 1;
-        if (index >= 0 && index < jawabanGabunganArray.length) {
-          jawabanGabunganArray[index] = jawaban;
-        }
+      const index = i; // Asumsi urutan sama
+      if (index >= 0 && index < jawabanGabunganArray.length) {
+        jawabanGabunganArray[index] = jawaban;
       }
     }
 
-    // 5. Simpan kembali jawaban gabungan
+    // 4. Simpan kembali jawaban gabungan
     const jawabanGabunganString = jawabanGabunganArray.join('|');
     
     await supabaseRequest(
@@ -297,7 +254,7 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
       }
     );
 
-    console.log(`[GABUNGAN] Jawaban gabungan diperbarui: ${totalSoal} soal`);
+    console.log(`[GABUNGAN] Jawaban gabungan diperbarui: ${jawabanGabunganArray.length} soal`);
     return true;
   } catch (error) {
     console.error('[GABUNGAN] Error update jawaban gabungan:', error);
@@ -329,7 +286,7 @@ app.get('/api/agenda', async (req, res) => {
     });
     res.json({ success: true, data: data || [] });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /agenda:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -356,13 +313,10 @@ app.post('/api/register', async (req, res) => {
     const username = String(form.username).trim();
     const noWa = String(form.no_wa).trim();
 
-    if (!/^[0-9A-Za-z_+.-]{3,50}$/.test(username) && !/^[0-9]{8,20}$/.test(username)) {
-      return res.status(400).json({ success: false, message: 'Username tidak valid' });
-    }
-
+    // Cek user yang sudah ada
     const cek = await supabaseRequest('peserta', 'GET', {
       select: 'id',
-      or: `(nis_username.eq.${username},no_wa_peserta.eq.${noWa})`,
+      or: `(nis_username.eq."${username}",no_wa_peserta.eq."${noWa}")`,
       limit: 1
     });
 
@@ -415,7 +369,7 @@ app.post('/api/register', async (req, res) => {
       token_agenda: tokenAgenda
     });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /register:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -430,7 +384,7 @@ app.post('/api/login', async (req, res) => {
 
     const userList = await supabaseRequest('peserta', 'GET', {
       select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
-      or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
+      or: `(nis_username.eq."${u}",no_wa_peserta.eq."${u}")`,
       limit: 1
     });
 
@@ -466,7 +420,7 @@ app.post('/api/login', async (req, res) => {
       token_agenda: tokenAgenda
     });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /login:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -503,7 +457,7 @@ app.get('/api/mapel', async (req, res) => {
 
     res.json({ success: true, data: finalData });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /mapel:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -523,11 +477,21 @@ app.post('/api/get-soal', async (req, res) => {
       id: `eq.${mapel_id}`,
       limit: 1
     });
-    if (!mapelRes || mapelRes.length === 0) throw new Error('Mapel Invalid');
+    if (!mapelRes || mapelRes.length === 0) {
+      return res.status(400).json({ success: false, message: 'Mapel tidak ditemukan' });
+    }
     const mapel = mapelRes[0];
 
-    const pRes = await supabaseRequest('peserta', 'GET', { select: 'nama_peserta', id: `eq.${peserta_id}`, limit: 1 });
-    const aRes = await supabaseRequest('agenda_ujian', 'GET', { select: 'agenda_ujian', id: `eq.${agenda_id}`, limit: 1 });
+    const pRes = await supabaseRequest('peserta', 'GET', { 
+      select: 'nama_peserta', 
+      id: `eq.${peserta_id}`, 
+      limit: 1 
+    });
+    const aRes = await supabaseRequest('agenda_ujian', 'GET', { 
+      select: 'agenda_ujian', 
+      id: `eq.${agenda_id}`, 
+      limit: 1 
+    });
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
@@ -621,7 +585,7 @@ app.post('/api/save-jawaban', async (req, res) => {
 
     res.json({ success: true });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /save-jawaban:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -655,7 +619,7 @@ app.post('/api/selesai-ujian', async (req, res) => {
 
     res.json({ success: true });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /selesai-ujian:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -690,40 +654,13 @@ app.get('/api/jawaban-gabungan', async (req, res) => {
       tgljam_update: data.tgljam_update
     });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /jawaban-gabungan:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
- * GET /api/verify-token
- */
-app.get('/api/verify-token', async (req, res) => {
-  const { agenda_id, token } = req.query || {};
-  try {
-    if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
-
-    const ag = await supabaseRequest('agenda_ujian', 'GET', {
-      select: 'token_ujian,agenda_ujian',
-      id: `eq.${agenda_id}`,
-      limit: 1
-    });
-
-    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
-
-    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
-      return res.status(400).json({ success: false, message: 'Token Salah!' });
-    }
-
-    res.json({ success: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/verify-token (POST version)
+ * POST /api/verify-token
  */
 app.post('/api/verify-token', async (req, res) => {
   const { agenda_id, token } = req.body || {};
@@ -736,7 +673,7 @@ app.post('/api/verify-token', async (req, res) => {
       limit: 1
     });
 
-    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
+    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda tidak ditemukan' });
 
     if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
       return res.status(400).json({ success: false, message: 'Token Salah!' });
@@ -744,7 +681,7 @@ app.post('/api/verify-token', async (req, res) => {
 
     res.json({ success: true });
   } catch (e) {
-    console.error(e);
+    console.error('Error di /verify-token:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
@@ -781,18 +718,32 @@ app.post('/api/init-gabungan', async (req, res) => {
     const result = await initJawabanGabungan(pid, aid);
     res.json(result);
   } catch (e) {
-    console.error(e);
+    console.error('Error di /init-gabungan:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-// Handler untuk route yang tidak ditemukan (harus di akhir)
+// Handler untuk route yang tidak ditemukan
 app.use('*', (req, res) => {
   res.status(404).json({ 
     success: false, 
     message: 'Endpoint tidak ditemukan',
     requested_url: req.originalUrl,
-    method: req.method
+    method: req.method,
+    available_endpoints: [
+      'GET /api/test',
+      'GET /api/health',
+      'GET /api/agenda',
+      'POST /api/register',
+      'POST /api/login',
+      'GET /api/mapel',
+      'POST /api/get-soal',
+      'POST /api/save-jawaban',
+      'POST /api/selesai-ujian',
+      'GET /api/jawaban-gabungan',
+      'POST /api/verify-token',
+      'POST /api/init-gabungan'
+    ]
   });
 });
 
@@ -807,19 +758,17 @@ app.use((err, req, res, next) => {
 });
 
 // Local run
-if (require.main === module) {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`========================================`);
-    console.log(`🚀 Server CBT Ujian Online`);
-    console.log(`📍 Port: ${PORT}`);
-    console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
-    console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`✅ Test endpoint: http://localhost:${PORT}/api/test`);
-    console.log(`✅ Health: http://localhost:${PORT}/api/health`);
-    console.log(`✅ Jawaban Gabungan: Format A|B|C|-|...`);
-    console.log(`========================================`);
-  });
-}
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`========================================`);
+  console.log(`🚀 Server CBT Ujian Online`);
+  console.log(`📍 Port: ${PORT}`);
+  console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
+  console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Test endpoint: http://localhost:${PORT}/api/test`);
+  console.log(`✅ Health: http://localhost:${PORT}/api/health`);
+  console.log(`✅ Jawaban Gabungan: Format A|B|C|-|...`);
+  console.log(`========================================`);
+});
 
 module.exports = app;
