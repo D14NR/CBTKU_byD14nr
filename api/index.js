@@ -11,6 +11,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // Env
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -48,14 +49,19 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, options);
+  try {
+    const response = await fetch(url, options);
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`DB Error (${response.status}): ${errorBody}`);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`DB Error (${response.status}): ${errorBody}`);
+    }
+
+    return response.status !== 204 ? await response.json() : null;
+  } catch (error) {
+    console.error('Supabase request error:', error);
+    throw error;
   }
-
-  return response.status !== 204 ? await response.json() : null;
 }
 
 function safeUser(u) {
@@ -74,10 +80,10 @@ function requireFields(obj, fields) {
   return null;
 }
 
-// ==================== FUNGSI JAWABAN GABUNGAN ====================
+// ==================== FUNGSI UTAMA ====================
 
 /**
- * Generate mapping dan inisialisasi jawaban gabungan untuk peserta baru
+ * Generate mapping dan inisialisasi jawaban gabungan
  */
 async function initJawabanGabungan(pid, aid) {
   try {
@@ -96,7 +102,6 @@ async function initJawabanGabungan(pid, aid) {
       return { success: false, message: 'Tidak ada mapel' };
     }
 
-    let allSoalIds = [];
     let totalSoal = 0;
     let soalMappings = [];
 
@@ -121,7 +126,6 @@ async function initJawabanGabungan(pid, aid) {
             no_soal_mapel: soal.no_soal || 1,
             no_urut_gabungan: totalSoal + 1
           });
-          allSoalIds.push(soal.id);
           totalSoal++;
         }
       }
@@ -188,9 +192,9 @@ async function initJawabanGabungan(pid, aid) {
  */
 async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
   try {
-    console.log(`[GABUNGAN] Update untuk mapel ${mid}, jawaban: ${jawabanMapelString.substring(0, 50)}...`);
+    console.log(`[GABUNGAN] Update untuk mapel ${mid}`);
     
-    // 1. Ambil semua soal untuk mapel ini beserta mapping-nya
+    // 1. Ambil semua soal untuk mapel ini
     const soalList = await supabaseRequest('bank_soal', 'GET', {
       select: 'id,no_soal',
       id_mapel: `eq.${mid}`,
@@ -230,8 +234,6 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
         console.error(`[GABUNGAN] Masih tidak ada mapping setelah init`);
         return false;
       }
-      
-      mappingList = mappingListNew;
     }
 
     // 3. Ambil jawaban gabungan saat ini
@@ -259,13 +261,10 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
         console.error(`[GABUNGAN] Masih tidak ada jawaban gabungan setelah init`);
         return false;
       }
-      
-      jawabanGabungan = jawabanGabunganNew;
     }
 
     const jawabanGabunganData = jawabanGabungan[0];
     let jawabanGabunganArray = jawabanGabunganData.jawaban.split('|');
-    const totalSoal = jawabanGabunganData.total_soal;
 
     // 4. Update jawaban untuk setiap soal di mapel ini
     for (let i = 0; i < soalList.length; i++) {
@@ -275,7 +274,7 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
       // Cari mapping untuk soal ini
       const mapping = mappingList.find(m => String(m.id_soal) === String(soalId));
       if (mapping) {
-        const index = mapping.no_urut_gabungan - 1; // Array index dimulai dari 0
+        const index = mapping.no_urut_gabungan - 1;
         if (index >= 0 && index < jawabanGabunganArray.length) {
           jawabanGabunganArray[index] = jawaban;
         }
@@ -298,7 +297,7 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
       }
     );
 
-    console.log(`[GABUNGAN] Jawaban gabungan diperbarui: ${jawabanGabunganString.substring(0, 50)}...`);
+    console.log(`[GABUNGAN] Jawaban gabungan diperbarui: ${totalSoal} soal`);
     return true;
   } catch (error) {
     console.error('[GABUNGAN] Error update jawaban gabungan:', error);
@@ -306,69 +305,21 @@ async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
   }
 }
 
-/**
- * Get jawaban gabungan untuk peserta
- */
-async function getJawabanGabungan(pid, aid) {
-  try {
-    const result = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'jawaban,total_soal,tgljam_update',
-      id_peserta: `eq.${pid}`,
-      id_agenda: `eq.${aid}`,
-      limit: 1
-    });
+// ==================== ROUTES ====================
 
-    if (!result || result.length === 0) {
-      return { success: false, message: 'Jawaban gabungan tidak ditemukan' };
-    }
-
-    const data = result[0];
-    const jawabanArray = data.jawaban.split('|');
-    
-    // Ambil mapping untuk info tambahan
-    const mappingList = await supabaseRequest('soal_mapping_gabungan', 'GET', {
-      select: 'no_urut_gabungan,id_mapel,id_soal,no_soal_mapel',
-      id_agenda: `eq.${aid}`,
-      order: 'no_urut_gabungan.asc'
-    });
-
-    // Format response yang lebih detail
-    const soalDetails = [];
-    if (mappingList && mappingList.length > 0) {
-      for (let i = 0; i < jawabanArray.length; i++) {
-        const mapping = mappingList.find(m => m.no_urut_gabungan === i + 1);
-        soalDetails.push({
-          no_urut: i + 1,
-          jawaban: jawabanArray[i],
-          id_mapel: mapping ? mapping.id_mapel : null,
-          id_soal: mapping ? mapping.id_soal : null,
-          no_soal_mapel: mapping ? mapping.no_soal_mapel : null
-        });
-      }
-    }
-
-    return {
-      success: true,
-      jawaban_string: data.jawaban,
-      jawaban_array: jawabanArray,
-      soal_details: soalDetails,
-      total_soal: data.total_soal,
-      tgljam_update: data.tgljam_update
-    };
-  } catch (error) {
-    console.error('[GABUNGAN] Error get jawaban gabungan:', error);
-    return { success: false, message: error.message };
-  }
-}
-
-// ==================== ROUTER ====================
-
-const router = express.Router();
+// Test route
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'API berjalan',
+    timestamp: new Date().toISOString() 
+  });
+});
 
 /**
  * GET /api/agenda
  */
-router.get('/agenda', async (req, res) => {
+app.get('/api/agenda', async (req, res) => {
   try {
     const now = new Date().toISOString();
     const data = await supabaseRequest('agenda_ujian', 'GET', {
@@ -386,7 +337,7 @@ router.get('/agenda', async (req, res) => {
 /**
  * POST /api/register
  */
-router.post('/register', async (req, res) => {
+app.post('/api/register', async (req, res) => {
   const form = req.body || {};
   try {
     const err = requireFields(form, [
@@ -472,7 +423,7 @@ router.post('/register', async (req, res) => {
 /**
  * POST /api/login
  */
-router.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { u, p } = req.body || {};
   try {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
@@ -521,9 +472,46 @@ router.post('/login', async (req, res) => {
 });
 
 /**
+ * GET /api/mapel
+ */
+app.get('/api/mapel', async (req, res) => {
+  const { agenda_id, peserta_id } = req.query || {};
+  try {
+    if (!agenda_id || !peserta_id) {
+      return res.status(400).json({ success: false, message: 'agenda_id & peserta_id wajib' });
+    }
+
+    const mapelList = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id,nama_mata_pelajaran,jumlah_soal,durasi_ujian',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: 'eq.Siap',
+      order: 'id.asc'
+    });
+
+    if (!mapelList) return res.json({ success: true, data: [] });
+
+    const jawabanSiswa = await supabaseRequest('jawaban', 'GET', {
+      select: 'id_mapel,status',
+      id_agenda: `eq.${agenda_id}`,
+      id_peserta: `eq.${peserta_id}`
+    });
+
+    const finalData = mapelList.map((m) => {
+      const jwb = jawabanSiswa ? jawabanSiswa.find((j) => String(j.id_mapel) === String(m.id)) : null;
+      return { ...m, status_kerjakan: jwb ? jwb.status : 'Belum' };
+    });
+
+    res.json({ success: true, data: finalData });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
  * POST /api/get-soal
  */
-router.post('/get-soal', async (req, res) => {
+app.post('/api/get-soal', async (req, res) => {
   const { agenda_id, peserta_id, mapel_id } = req.body || {};
   try {
     if (!agenda_id || !peserta_id || !mapel_id) {
@@ -610,9 +598,8 @@ router.post('/get-soal', async (req, res) => {
 
 /**
  * POST /api/save-jawaban
- * PERUBAHAN: Juga update jawaban gabungan
  */
-router.post('/save-jawaban', async (req, res) => {
+app.post('/api/save-jawaban', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
   try {
     if (!pid || !aid || !mid) return res.status(400).json({ success: false, message: 'pid, aid, mid wajib' });
@@ -642,7 +629,7 @@ router.post('/save-jawaban', async (req, res) => {
 /**
  * POST /api/selesai-ujian
  */
-router.post('/selesai-ujian', async (req, res) => {
+app.post('/api/selesai-ujian', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
   try {
     if (!pid || !aid || !mid) return res.status(400).json({ success: false, message: 'pid, aid, mid wajib' });
@@ -675,100 +662,32 @@ router.post('/selesai-ujian', async (req, res) => {
 
 /**
  * GET /api/jawaban-gabungan
- * Mendapatkan jawaban gabungan dalam format A|B|C|-|...
  */
-router.get('/jawaban-gabungan', async (req, res) => {
-  const { pid, aid, detail = 'false' } = req.query || {};
+app.get('/api/jawaban-gabungan', async (req, res) => {
+  const { pid, aid } = req.query || {};
   try {
     if (!pid || !aid) {
       return res.status(400).json({ success: false, message: 'pid & aid wajib' });
     }
 
-    const result = await getJawabanGabungan(pid, aid);
-    
-    if (detail === 'true') {
-      // Return detail lengkap
-      res.json(result);
-    } else {
-      // Return hanya string jawaban
-      res.json({
-        success: result.success,
-        jawaban: result.success ? result.jawaban_string : '',
-        total_soal: result.success ? result.total_soal : 0
-      });
-    }
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/export-jawaban-gabungan
- * Export semua jawaban gabungan untuk admin
- */
-router.get('/export-jawaban-gabungan', async (req, res) => {
-  const { agenda_id, format = 'json' } = req.query || {};
-  try {
-    if (!agenda_id) {
-      return res.status(400).json({ success: false, message: 'agenda_id wajib' });
-    }
-
-    // Ambil semua peserta untuk agenda ini
-    const pesertaList = await supabaseRequest('peserta', 'GET', {
-      select: 'id,nama_peserta,nis_username,kelas,asal_sekolah',
-      id_agenda: `eq.${agenda_id}`,
-      status: `eq.Aktif`,
-      order: 'nama_peserta.asc'
+    const result = await supabaseRequest('jawaban_gabungan', 'GET', {
+      select: 'jawaban,total_soal,tgljam_update',
+      id_peserta: `eq.${pid}`,
+      id_agenda: `eq.${aid}`,
+      limit: 1
     });
 
-    if (!pesertaList || pesertaList.length === 0) {
-      return res.json({ success: true, data: [], message: 'Tidak ada peserta' });
+    if (!result || result.length === 0) {
+      return res.json({ success: true, jawaban: '', total_soal: 0 });
     }
 
-    const result = [];
+    const data = result[0];
     
-    for (const peserta of pesertaList) {
-      const jawabanResult = await getJawabanGabungan(peserta.id, agenda_id);
-      
-      if (jawabanResult.success) {
-        result.push({
-          id_peserta: peserta.id,
-          nama_peserta: peserta.nama_peserta,
-          nis_username: peserta.nis_username,
-          kelas: peserta.kelas,
-          asal_sekolah: peserta.asal_sekolah,
-          jawaban_gabungan: jawabanResult.jawaban_string,
-          total_soal: jawabanResult.total_soal,
-          tgljam_update: jawabanResult.tgljam_update
-        });
-      }
-    }
-
-    if (format === 'csv') {
-      // Generate CSV sederhana
-      if (result.length === 0) {
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="jawaban_gabungan.csv"');
-        return res.send('Nama,NIS,Kelas,Sekolah,Jawaban Gabungan\n');
-      }
-
-      let csv = 'Nama,NIS,Kelas,Sekolah,Jawaban Gabungan\n';
-      result.forEach(peserta => {
-        csv += `"${peserta.nama_peserta}","${peserta.nis_username}","${peserta.kelas}","${peserta.asal_sekolah}","${peserta.jawaban_gabungan}"\n`;
-      });
-
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename="jawaban_gabungan.csv"');
-      return res.send(csv);
-    }
-
-    // Default: JSON
     res.json({
       success: true,
-      agenda_id: agenda_id,
-      total_peserta: result.length,
-      data: result
+      jawaban: data.jawaban || '',
+      total_soal: data.total_soal || 0,
+      tgljam_update: data.tgljam_update
     });
   } catch (e) {
     console.error(e);
@@ -777,18 +696,53 @@ router.get('/export-jawaban-gabungan', async (req, res) => {
 });
 
 /**
- * POST /api/init-gabungan
- * Force init jawaban gabungan (untuk testing/admin)
+ * GET /api/verify-token
  */
-router.post('/init-gabungan', async (req, res) => {
-  const { pid, aid } = req.body || {};
+app.get('/api/verify-token', async (req, res) => {
+  const { agenda_id, token } = req.query || {};
   try {
-    if (!pid || !aid) {
-      return res.status(400).json({ success: false, message: 'pid & aid wajib' });
+    if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
+
+    const ag = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'token_ujian,agenda_ujian',
+      id: `eq.${agenda_id}`,
+      limit: 1
+    });
+
+    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
+
+    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
+      return res.status(400).json({ success: false, message: 'Token Salah!' });
     }
 
-    const result = await initJawabanGabungan(pid, aid);
-    res.json(result);
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/verify-token (POST version)
+ */
+app.post('/api/verify-token', async (req, res) => {
+  const { agenda_id, token } = req.body || {};
+  try {
+    if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
+
+    const ag = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'token_ujian,agenda_ujian',
+      id: `eq.${agenda_id}`,
+      limit: 1
+    });
+
+    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
+
+    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
+      return res.status(400).json({ success: false, message: 'Token Salah!' });
+    }
+
+    res.json({ success: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
@@ -798,7 +752,7 @@ router.post('/init-gabungan', async (req, res) => {
 /**
  * GET /api/health
  */
-router.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     message: 'Server berjalan dengan baik',
@@ -814,11 +768,32 @@ router.get('/health', (req, res) => {
   });
 });
 
-app.use('/api', router);
+/**
+ * POST /api/init-gabungan
+ */
+app.post('/api/init-gabungan', async (req, res) => {
+  const { pid, aid } = req.body || {};
+  try {
+    if (!pid || !aid) {
+      return res.status(400).json({ success: false, message: 'pid & aid wajib' });
+    }
 
-// Handler untuk route yang tidak ditemukan
+    const result = await initJawabanGabungan(pid, aid);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Handler untuk route yang tidak ditemukan (harus di akhir)
 app.use('*', (req, res) => {
-  res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan' });
+  res.status(404).json({ 
+    success: false, 
+    message: 'Endpoint tidak ditemukan',
+    requested_url: req.originalUrl,
+    method: req.method
+  });
 });
 
 // Error handler global
@@ -840,8 +815,9 @@ if (require.main === module) {
     console.log(`📍 Port: ${PORT}`);
     console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
     console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`✅ Jawaban Gabungan: Format A|B|C|-|...`);
+    console.log(`✅ Test endpoint: http://localhost:${PORT}/api/test`);
     console.log(`✅ Health: http://localhost:${PORT}/api/health`);
+    console.log(`✅ Jawaban Gabungan: Format A|B|C|-|...`);
     console.log(`========================================`);
   });
 }
