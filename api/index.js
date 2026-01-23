@@ -3,24 +3,26 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const crypto = require('crypto');
 
+// Load env dari .env saat lokal. Di Vercel, env diambil dari Environment Variables.
 dotenv.config();
+
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true }));
 
 // Env
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.warn('[WARN] SUPABASE_URL / SUPABASE_KEY belum diset.');
+  console.warn('[WARN] SUPABASE_URL / SUPABASE_KEY belum diset. Set env di Vercel atau .env saat lokal.');
 }
 
-// Helper: request ke Supabase REST (FIXED untuk UUID)
+// Helper: request ke Supabase REST
 async function supabaseRequest(path, method = 'GET', query = null, body = null) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error('Server belum dikonfigurasi: SUPABASE_URL / SUPABASE_KEY kosong.');
@@ -30,15 +32,7 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
 
   if (query) {
     for (const [k, v] of Object.entries(query)) {
-      // Handle UUID dan string dengan benar
-      if (typeof v === 'string' && v.includes('.')) {
-        // Ini adalah operator dengan titik (eq., gt., etc)
-        url.searchParams.set(k, v);
-      } else {
-        // Quote string values untuk UUID
-        const value = typeof v === 'string' ? `"${v}"` : String(v);
-        url.searchParams.set(k, value);
-      }
+      url.searchParams.set(k, String(v));
     }
   }
 
@@ -56,26 +50,20 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null) 
     options.body = JSON.stringify(body);
   }
 
-  try {
-    const response = await fetch(url, options);
+  const response = await fetch(url, options);
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`Supabase Error (${response.status}):`, errorBody);
-      throw new Error(`DB Error (${response.status}): ${errorBody}`);
-    }
-
-    return response.status !== 204 ? await response.json() : null;
-  } catch (error) {
-    console.error('Supabase request error:', error);
-    throw error;
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`DB Error (${response.status}): ${errorBody}`);
   }
+
+  return response.status !== 204 ? await response.json() : null;
 }
 
 function safeUser(u) {
   if (!u) return u;
   const copy = { ...u };
-  delete copy.password;
+  delete copy.password; // jangan pernah kirim password ke client
   return copy;
 }
 
@@ -88,195 +76,13 @@ function requireFields(obj, fields) {
   return null;
 }
 
-// ==================== FUNGSI UTAMA ====================
-
-/**
- * Generate mapping dan inisialisasi jawaban gabungan
- */
-async function initJawabanGabungan(pid, aid) {
-  try {
-    console.log(`[GABUNGAN] Inisialisasi untuk peserta ${pid}, agenda ${aid}`);
-    
-    // 1. Ambil semua mapel untuk agenda ini
-    const mapelList = await supabaseRequest('mata_pelajaran', 'GET', {
-      select: 'id,nama_mata_pelajaran',
-      id_agenda: `eq.${aid}`,
-      status_mapel: `eq.Siap`,
-      order: 'id.asc'
-    });
-
-    if (!mapelList || mapelList.length === 0) {
-      console.log(`[GABUNGAN] Tidak ada mapel untuk agenda ${aid}`);
-      return { success: false, message: 'Tidak ada mapel' };
-    }
-
-    let totalSoal = 0;
-    let soalMappings = [];
-
-    // 2. Loop semua mapel dan ambil semua soal
-    for (const mapel of mapelList) {
-      const soalList = await supabaseRequest('bank_soal', 'GET', {
-        select: 'id,no_soal',
-        id_mapel: `eq.${mapel.id}`,
-        order: 'no_soal.asc',
-        limit: 500
-      });
-
-      if (soalList && soalList.length > 0) {
-        console.log(`[GABUNGAN] Mapel ${mapel.nama_mata_pelajaran}: ${soalList.length} soal`);
-        
-        // Simpan mapping
-        for (const soal of soalList) {
-          soalMappings.push({
-            id_agenda: aid,
-            id_mapel: mapel.id,
-            id_soal: soal.id,
-            no_soal_mapel: soal.no_soal || 1,
-            no_urut_gabungan: totalSoal + 1
-          });
-          totalSoal++;
-        }
-      }
-    }
-
-    console.log(`[GABUNGAN] Total soal gabungan: ${totalSoal}`);
-
-    // 3. Inisialisasi jawaban gabungan dengan string kosong
-    const jawabanAwal = Array(totalSoal).fill('-').join('|');
-    
-    // Cek apakah sudah ada jawaban gabungan
-    const existingJawaban = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id',
-      id_peserta: `eq.${pid}`,
-      id_agenda: `eq.${aid}`,
-      limit: 1
-    });
-
-    if (!existingJawaban || existingJawaban.length === 0) {
-      await supabaseRequest('jawaban_gabungan', 'POST', null, {
-        id_peserta: pid,
-        id_agenda: aid,
-        jawaban: jawabanAwal,
-        total_soal: totalSoal,
-        tgljam_update: new Date().toISOString()
-      });
-      console.log(`[GABUNGAN] Jawaban gabungan diinisialisasi: ${totalSoal} soal`);
-    } else {
-      console.log(`[GABUNGAN] Jawaban gabungan sudah ada`);
-    }
-
-    return { 
-      success: true, 
-      total_soal: totalSoal,
-      jawaban_awal: jawabanAwal
-    };
-  } catch (error) {
-    console.error('[GABUNGAN] Error init jawaban gabungan:', error);
-    return { success: false, message: error.message };
-  }
-}
-
-/**
- * Update jawaban gabungan ketika jawaban per mapel berubah
- */
-async function updateJawabanGabungan(pid, aid, mid, jawabanMapelString) {
-  try {
-    console.log(`[GABUNGAN] Update untuk mapel ${mid}`);
-    
-    // 1. Ambil semua soal untuk mapel ini
-    const soalList = await supabaseRequest('bank_soal', 'GET', {
-      select: 'id,no_soal',
-      id_mapel: `eq.${mid}`,
-      order: 'no_soal.asc',
-      limit: 500
-    });
-
-    if (!soalList || soalList.length === 0) {
-      console.log(`[GABUNGAN] Tidak ada soal untuk mapel ${mid}`);
-      return false;
-    }
-
-    const jawabanArray = jawabanMapelString.split('|');
-    
-    // 2. Ambil jawaban gabungan saat ini
-    const jawabanGabungan = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id,jawaban,total_soal',
-      id_peserta: `eq.${pid}`,
-      id_agenda: `eq.${aid}`,
-      limit: 1
-    });
-
-    if (!jawabanGabungan || jawabanGabungan.length === 0) {
-      console.log(`[GABUNGAN] Jawaban gabungan tidak ditemukan, init dulu...`);
-      const initResult = await initJawabanGabungan(pid, aid);
-      if (!initResult.success) return false;
-      
-      // Coba ambil lagi
-      const jawabanGabunganNew = await supabaseRequest('jawaban_gabungan', 'GET', {
-        select: 'id,jawaban,total_soal',
-        id_peserta: `eq.${pid}`,
-        id_agenda: `eq.${aid}`,
-        limit: 1
-      });
-      
-      if (!jawabanGabunganNew || jawabanGabunganNew.length === 0) {
-        console.error(`[GABUNGAN] Masih tidak ada jawaban gabungan setelah init`);
-        return false;
-      }
-      jawabanGabungan = jawabanGabunganNew;
-    }
-
-    const jawabanGabunganData = jawabanGabungan[0];
-    let jawabanGabunganArray = jawabanGabunganData.jawaban.split('|');
-
-    // 3. Update jawaban untuk setiap soal di mapel ini
-    for (let i = 0; i < soalList.length; i++) {
-      const jawaban = i < jawabanArray.length ? jawabanArray[i] : '-';
-      const index = i; // Asumsi urutan sama
-      if (index >= 0 && index < jawabanGabunganArray.length) {
-        jawabanGabunganArray[index] = jawaban;
-      }
-    }
-
-    // 4. Simpan kembali jawaban gabungan
-    const jawabanGabunganString = jawabanGabunganArray.join('|');
-    
-    await supabaseRequest(
-      'jawaban_gabungan',
-      'PATCH',
-      {
-        id_peserta: `eq.${pid}`,
-        id_agenda: `eq.${aid}`
-      },
-      {
-        jawaban: jawabanGabunganString,
-        tgljam_update: new Date().toISOString()
-      }
-    );
-
-    console.log(`[GABUNGAN] Jawaban gabungan diperbarui: ${jawabanGabunganArray.length} soal`);
-    return true;
-  } catch (error) {
-    console.error('[GABUNGAN] Error update jawaban gabungan:', error);
-    return false;
-  }
-}
-
-// ==================== ROUTES ====================
-
-// Test route
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'API berjalan',
-    timestamp: new Date().toISOString() 
-  });
-});
+// Router /api
+const router = express.Router();
 
 /**
  * GET /api/agenda
  */
-app.get('/api/agenda', async (req, res) => {
+router.get('/agenda', async (req, res) => {
   try {
     const now = new Date().toISOString();
     const data = await supabaseRequest('agenda_ujian', 'GET', {
@@ -286,15 +92,15 @@ app.get('/api/agenda', async (req, res) => {
     });
     res.json({ success: true, data: data || [] });
   } catch (e) {
-    console.error('Error di /agenda:', e);
+    console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
- * POST /api/register
+ * POST /api/register  (PLAINTEXT PASSWORD)
  */
-app.post('/api/register', async (req, res) => {
+router.post('/register', async (req, res) => {
   const form = req.body || {};
   try {
     const err = requireFields(form, [
@@ -313,10 +119,14 @@ app.post('/api/register', async (req, res) => {
     const username = String(form.username).trim();
     const noWa = String(form.no_wa).trim();
 
-    // Cek user yang sudah ada
+    // basic sanitasi agar query Supabase "or" tidak aneh
+    if (!/^[0-9A-Za-z_+.-]{3,50}$/.test(username) && !/^[0-9]{8,20}$/.test(username)) {
+      return res.status(400).json({ success: false, message: 'Username tidak valid' });
+    }
+
     const cek = await supabaseRequest('peserta', 'GET', {
       select: 'id',
-      or: `(nis_username.eq."${username}",no_wa_peserta.eq."${noWa}")`,
+      or: `(nis_username.eq.${username},no_wa_peserta.eq.${noWa})`,
       limit: 1
     });
 
@@ -324,10 +134,11 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
+    // TANPA HASH: simpan password apa adanya (plaintext)
     const payload = {
       nama_peserta: String(form.nama).toUpperCase(),
       nis_username: username,
-      password: String(form.password),
+      password: String(form.password), // PLAINTEXT
       jenjang_studi: String(form.jenjang),
       kelas: String(form.kelas),
       asal_sekolah: String(form.sekolah),
@@ -353,15 +164,6 @@ app.post('/api/register', async (req, res) => {
       }
     }
 
-    // Inisialisasi jawaban gabungan untuk peserta baru
-    setTimeout(() => {
-      if (resData && resData[0]) {
-        initJawabanGabungan(resData[0].id, form.agenda_id).then(result => {
-          console.log(`[REGISTER] Jawaban gabungan diinit: ${result.success ? 'Success' : 'Failed'}`);
-        });
-      }
-    }, 1000);
-
     res.json({ 
       success: true, 
       data: safeUser(resData?.[0]), 
@@ -369,22 +171,25 @@ app.post('/api/register', async (req, res) => {
       token_agenda: tokenAgenda
     });
   } catch (e) {
-    console.error('Error di /register:', e);
+    console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
- * POST /api/login
+ * POST /api/login  (PLAINTEXT PASSWORD)
+ * body: { u, p }
  */
-app.post('/api/login', async (req, res) => {
+router.post('/login', async (req, res) => {
   const { u, p } = req.body || {};
   try {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
 
     const userList = await supabaseRequest('peserta', 'GET', {
-      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
-      or: `(nis_username.eq."${u}",no_wa_peserta.eq."${u}")`,
+      // ambil kolom yang perlu + password untuk dicek
+      select:
+        'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
+      or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
       limit: 1
     });
 
@@ -398,10 +203,12 @@ app.post('/api/login', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Akun Nonaktif/Blokir' });
     }
 
+    // TANPA HASH: cocokkan string langsung
     if (String(user.password || '') !== String(p)) {
       return res.status(401).json({ success: false, message: 'Password salah' });
     }
 
+    // Dapatkan info agenda untuk token
     let tokenAgenda = '';
     if (user.id_agenda) {
       const ag = await supabaseRequest('agenda_ujian', 'GET', {
@@ -420,15 +227,282 @@ app.post('/api/login', async (req, res) => {
       token_agenda: tokenAgenda
     });
   } catch (e) {
-    console.error('Error di /login:', e);
+    console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
- * GET /api/mapel
+ * POST /api/forgot-password
+ * Minta reset password (kirim kode OTP)
  */
-app.get('/api/mapel', async (req, res) => {
+router.post('/forgot-password', async (req, res) => {
+  const { username } = req.body || {};
+  try {
+    if (!username) return res.status(400).json({ success: false, message: 'Username/Nomor WA wajib diisi' });
+
+    // Cari user berdasarkan username/no WA
+    const userList = await supabaseRequest('peserta', 'GET', {
+      select: 'id,nama_peserta,nis_username,no_wa_peserta',
+      or: `(nis_username.eq.${username},no_wa_peserta.eq.${username})`,
+      limit: 1
+    });
+
+    if (!userList || userList.length === 0) {
+      return res.status(404).json({ success: false, message: 'Akun tidak ditemukan' });
+    }
+
+    const user = userList[0];
+    
+    // Generate OTP 6 digit
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60000); // 10 menit dari sekarang
+    
+    // Simpan OTP ke database
+    await supabaseRequest(
+      'password_reset',
+      'POST',
+      null,
+      {
+        user_id: user.id,
+        username: user.nis_username,
+        otp_code: otp,
+        expires_at: otpExpiry.toISOString(),
+        status: 'pending',
+        created_at: new Date().toISOString()
+      }
+    );
+
+    // NOTE: Dalam implementasi nyata, OTP dikirim via SMS/WhatsApp/Email
+    // Di sini kita hanya return di response untuk testing
+    console.log(`OTP untuk ${user.nis_username}: ${otp} (valid 10 menit)`);
+
+    res.json({ 
+      success: true, 
+      message: 'Kode OTP telah dikirim',
+      // Hanya untuk development/testing, hapus di production
+      otp: process.env.NODE_ENV === 'development' ? otp : undefined,
+      user_id: user.id,
+      nama: user.nama_peserta
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/verify-otp
+ * Verifikasi OTP
+ */
+router.post('/verify-otp', async (req, res) => {
+  const { user_id, otp } = req.body || {};
+  try {
+    if (!user_id || !otp) return res.status(400).json({ success: false, message: 'User ID dan OTP wajib diisi' });
+
+    // Cari OTP yang valid
+    const otpList = await supabaseRequest('password_reset', 'GET', {
+      select: 'id,otp_code,expires_at,status',
+      user_id: `eq.${user_id}`,
+      otp_code: `eq.${otp}`,
+      status: `eq.pending`,
+      order: 'created_at.desc',
+      limit: 1
+    });
+
+    if (!otpList || otpList.length === 0) {
+      return res.status(400).json({ success: false, message: 'Kode OTP tidak valid' });
+    }
+
+    const otpData = otpList[0];
+    const now = new Date();
+    const expiryDate = new Date(otpData.expires_at);
+
+    if (now > expiryDate) {
+      await supabaseRequest(
+        'password_reset',
+        'PATCH',
+        { id: `eq.${otpData.id}` },
+        { status: 'expired' }
+      );
+      return res.status(400).json({ success: false, message: 'Kode OTP sudah kadaluarsa' });
+    }
+
+    // Update status OTP menjadi verified
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      { id: `eq.${otpData.id}` },
+      { status: 'verified', verified_at: new Date().toISOString() }
+    );
+
+    // Generate reset token untuk reset password
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date(Date.now() + 30 * 60000); // 30 menit
+
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      { id: `eq.${otpData.id}` },
+      { 
+        reset_token: resetToken,
+        token_expires_at: tokenExpiry.toISOString()
+      }
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'OTP berhasil diverifikasi',
+      reset_token: resetToken,
+      token_expires_at: tokenExpiry.toISOString()
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/reset-password
+ * Reset password dengan token
+ */
+router.post('/reset-password', async (req, res) => {
+  const { reset_token, new_password, confirm_password } = req.body || {};
+  try {
+    if (!reset_token || !new_password || !confirm_password) {
+      return res.status(400).json({ success: false, message: 'Token dan password baru wajib diisi' });
+    }
+
+    if (new_password !== confirm_password) {
+      return res.status(400).json({ success: false, message: 'Password baru tidak cocok' });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter' });
+    }
+
+    // Cari reset token yang valid
+    const resetList = await supabaseRequest('password_reset', 'GET', {
+      select: 'id,user_id,reset_token,token_expires_at,status',
+      reset_token: `eq.${reset_token}`,
+      status: `eq.verified`,
+      limit: 1
+    });
+
+    if (!resetList || resetList.length === 0) {
+      return res.status(400).json({ success: false, message: 'Token reset tidak valid' });
+    }
+
+    const resetData = resetList[0];
+    const now = new Date();
+    const tokenExpiry = new Date(resetData.token_expires_at);
+
+    if (now > tokenExpiry) {
+      await supabaseRequest(
+        'password_reset',
+        'PATCH',
+        { id: `eq.${resetData.id}` },
+        { status: 'expired' }
+      );
+      return res.status(400).json({ success: false, message: 'Token reset sudah kadaluarsa' });
+    }
+
+    // TANPA HASH: simpan password plaintext
+    // Update password user
+    await supabaseRequest(
+      'peserta',
+      'PATCH',
+      { id: `eq.${resetData.user_id}` },
+      { password: String(new_password) } // PLAINTEXT
+    );
+
+    // Update status reset menjadi completed
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      { id: `eq.${resetData.id}` },
+      { 
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      }
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Password berhasil direset. Silakan login dengan password baru.' 
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Endpoint untuk membersihkan data reset password yang expired
+router.post('/cleanup-expired-resets', async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    
+    // Update status yang expired
+    await supabaseRequest(
+      'password_reset',
+      'PATCH',
+      {
+        status: 'eq.pending',
+        expires_at: `lt.${now}`
+      },
+      { status: 'expired' }
+    );
+    
+    // Hapus data yang sudah completed lebih dari 7 hari
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    await supabaseRequest(
+      'password_reset',
+      'DELETE',
+      {
+        status: 'eq.completed',
+        completed_at: `lt.${sevenDaysAgo}`
+      }
+    );
+    
+    res.json({ success: true, message: 'Cleanup berhasil' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * POST /api/verify-token
+ * body: { agenda_id, token }
+ */
+router.post('/verify-token', async (req, res) => {
+  const { agenda_id, token } = req.body || {};
+  try {
+    if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
+
+    const ag = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'token_ujian,agenda_ujian',
+      id: `eq.${agenda_id}`,
+      limit: 1
+    });
+
+    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
+
+    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
+      return res.status(400).json({ success: false, message: 'Token Salah!' });
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+/**
+ * GET /api/mapel?agenda_id=...&peserta_id=...
+ */
+router.get('/mapel', async (req, res) => {
   const { agenda_id, peserta_id } = req.query || {};
   try {
     if (!agenda_id || !peserta_id) {
@@ -457,15 +531,17 @@ app.get('/api/mapel', async (req, res) => {
 
     res.json({ success: true, data: finalData });
   } catch (e) {
-    console.error('Error di /mapel:', e);
+    console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
  * POST /api/get-soal
+ * body: { agenda_id, peserta_id, mapel_id }
+ * PERUBAHAN: Hanya ambil field yang ada di database
  */
-app.post('/api/get-soal', async (req, res) => {
+router.post('/get-soal', async (req, res) => {
   const { agenda_id, peserta_id, mapel_id } = req.body || {};
   try {
     if (!agenda_id || !peserta_id || !mapel_id) {
@@ -477,28 +553,21 @@ app.post('/api/get-soal', async (req, res) => {
       id: `eq.${mapel_id}`,
       limit: 1
     });
-    if (!mapelRes || mapelRes.length === 0) {
-      return res.status(400).json({ success: false, message: 'Mapel tidak ditemukan' });
-    }
+    if (!mapelRes || mapelRes.length === 0) throw new Error('Mapel Invalid');
     const mapel = mapelRes[0];
 
-    const pRes = await supabaseRequest('peserta', 'GET', { 
-      select: 'nama_peserta', 
-      id: `eq.${peserta_id}`, 
-      limit: 1 
-    });
-    const aRes = await supabaseRequest('agenda_ujian', 'GET', { 
-      select: 'agenda_ujian', 
-      id: `eq.${agenda_id}`, 
-      limit: 1 
-    });
+    const pRes = await supabaseRequest('peserta', 'GET', { select: 'nama_peserta', id: `eq.${peserta_id}`, limit: 1 });
+    const aRes = await supabaseRequest('agenda_ujian', 'GET', { select: 'agenda_ujian', id: `eq.${agenda_id}`, limit: 1 });
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
+    // AMBIL SEMUA FIELD YANG ADA DI DATABASE - HANYA FIELD YANG DIPERLUKAN
+    // Hapus gambar_a, gambar_b, gambar_c, gambar_d, gambar_e jika tidak ada di database
     const soal = await supabaseRequest('bank_soal', 'GET', {
-      select: 'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
+      select:
+        'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc',
+      order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
       limit: 500
     });
 
@@ -533,17 +602,10 @@ app.post('/api/get-soal', async (req, res) => {
       });
     }
 
-    // Pastikan jawaban gabungan sudah diinisialisasi
-    const checkGabungan = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'id',
-      id_peserta: `eq.${peserta_id}`,
-      id_agenda: `eq.${agenda_id}`,
-      limit: 1
-    });
-
-    if (!checkGabungan || checkGabungan.length === 0) {
-      console.log(`[GET-SOAL] Inisialisasi jawaban gabungan...`);
-      await initJawabanGabungan(peserta_id, agenda_id);
+    // Log untuk debugging
+    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Jumlah soal: ${soal ? soal.length : 0}`);
+    if (soal && soal.length > 0) {
+      console.log(`[GET-SOAL] Sample soal pertama - ID: ${soal[0].id}, No Soal: ${soal[0].no_soal}`);
     }
 
     res.json({
@@ -562,13 +624,13 @@ app.post('/api/get-soal', async (req, res) => {
 
 /**
  * POST /api/save-jawaban
+ * body: { pid, aid, mid, jwb }
  */
-app.post('/api/save-jawaban', async (req, res) => {
+router.post('/save-jawaban', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
   try {
     if (!pid || !aid || !mid) return res.status(400).json({ success: false, message: 'pid, aid, mid wajib' });
 
-    // 1. Simpan ke tabel jawaban biasa
     await supabaseRequest(
       'jawaban',
       'PATCH',
@@ -580,25 +642,22 @@ app.post('/api/save-jawaban', async (req, res) => {
       { jawaban: jwb }
     );
 
-    // 2. Update jawaban gabungan
-    await updateJawabanGabungan(pid, aid, mid, jwb);
-
     res.json({ success: true });
   } catch (e) {
-    console.error('Error di /save-jawaban:', e);
+    console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
  * POST /api/selesai-ujian
+ * body: { pid, aid, mid, jwb }
  */
-app.post('/api/selesai-ujian', async (req, res) => {
+router.post('/selesai-ujian', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
   try {
     if (!pid || !aid || !mid) return res.status(400).json({ success: false, message: 'pid, aid, mid wajib' });
 
-    // Update jawaban biasa
     await supabaseRequest(
       'jawaban',
       'PATCH',
@@ -614,90 +673,22 @@ app.post('/api/selesai-ujian', async (req, res) => {
       }
     );
 
-    // Update jawaban gabungan
-    await updateJawabanGabungan(pid, aid, mid, jwb);
-
     res.json({ success: true });
   } catch (e) {
-    console.error('Error di /selesai-ujian:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/jawaban-gabungan
- */
-app.get('/api/jawaban-gabungan', async (req, res) => {
-  const { pid, aid } = req.query || {};
-  try {
-    if (!pid || !aid) {
-      return res.status(400).json({ success: false, message: 'pid & aid wajib' });
-    }
-
-    const result = await supabaseRequest('jawaban_gabungan', 'GET', {
-      select: 'jawaban,total_soal,tgljam_update',
-      id_peserta: `eq.${pid}`,
-      id_agenda: `eq.${aid}`,
-      limit: 1
-    });
-
-    if (!result || result.length === 0) {
-      return res.json({ success: true, jawaban: '', total_soal: 0 });
-    }
-
-    const data = result[0];
-    
-    res.json({
-      success: true,
-      jawaban: data.jawaban || '',
-      total_soal: data.total_soal || 0,
-      tgljam_update: data.tgljam_update
-    });
-  } catch (e) {
-    console.error('Error di /jawaban-gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/verify-token
- */
-app.post('/api/verify-token', async (req, res) => {
-  const { agenda_id, token } = req.body || {};
-  try {
-    if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
-
-    const ag = await supabaseRequest('agenda_ujian', 'GET', {
-      select: 'token_ujian,agenda_ujian',
-      id: `eq.${agenda_id}`,
-      limit: 1
-    });
-
-    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda tidak ditemukan' });
-
-    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
-      return res.status(400).json({ success: false, message: 'Token Salah!' });
-    }
-
-    res.json({ success: true });
-  } catch (e) {
-    console.error('Error di /verify-token:', e);
+    console.error(e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
  * GET /api/health
+ * Endpoint untuk cek kesehatan server
  */
-app.get('/api/health', (req, res) => {
+router.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'Server berjalan dengan baik',
     timestamp: new Date().toISOString(),
-    features: {
-      jawaban_gabungan: 'Aktif',
-      format: 'A|B|C|-|D|...'
-    },
     env: {
       supabase_url: SUPABASE_URL ? 'Terisi' : 'Kosong',
       node_env: process.env.NODE_ENV || 'development'
@@ -705,46 +696,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-/**
- * POST /api/init-gabungan
- */
-app.post('/api/init-gabungan', async (req, res) => {
-  const { pid, aid } = req.body || {};
-  try {
-    if (!pid || !aid) {
-      return res.status(400).json({ success: false, message: 'pid & aid wajib' });
-    }
-
-    const result = await initJawabanGabungan(pid, aid);
-    res.json(result);
-  } catch (e) {
-    console.error('Error di /init-gabungan:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
+app.use('/api', router);
 
 // Handler untuk route yang tidak ditemukan
 app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'Endpoint tidak ditemukan',
-    requested_url: req.originalUrl,
-    method: req.method,
-    available_endpoints: [
-      'GET /api/test',
-      'GET /api/health',
-      'GET /api/agenda',
-      'POST /api/register',
-      'POST /api/login',
-      'GET /api/mapel',
-      'POST /api/get-soal',
-      'POST /api/save-jawaban',
-      'POST /api/selesai-ujian',
-      'GET /api/jawaban-gabungan',
-      'POST /api/verify-token',
-      'POST /api/init-gabungan'
-    ]
-  });
+  res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan' });
 });
 
 // Error handler global
@@ -757,18 +713,18 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Local run
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`========================================`);
-  console.log(`🚀 Server CBT Ujian Online`);
-  console.log(`📍 Port: ${PORT}`);
-  console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
-  console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✅ Test endpoint: http://localhost:${PORT}/api/test`);
-  console.log(`✅ Health: http://localhost:${PORT}/api/health`);
-  console.log(`✅ Jawaban Gabungan: Format A|B|C|-|...`);
-  console.log(`========================================`);
-});
+// Local run (tidak dipakai di Vercel serverless)
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`========================================`);
+    console.log(`🚀 Server CBT Ujian Online`);
+    console.log(`📍 Port: ${PORT}`);
+    console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
+    console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
+    console.log(`========================================`);
+  });
+}
 
 module.exports = app;
