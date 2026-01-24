@@ -5818,6 +5818,12 @@ async function showOfflineDownloadPrompt() {
 }
 
 async function downloadAllOfflineData(agendaId, userId) {
+  // Validasi parameter
+  if (!agendaId || !userId) {
+    showToast('Data user tidak lengkap', 'error');
+    return false;
+  }
+  
   showLoader(true, 'Mendownload data untuk mode offline...');
   
   try {
@@ -5845,25 +5851,6 @@ async function downloadAllOfflineData(agendaId, userId) {
       // Save ALL soal
       const totalSoal = await offlineCache.saveAllSoal(agendaId, data.soal_by_mapel);
       
-      // Save existing jawaban (jika ada)
-      if (data.existing_jawaban && data.existing_jawaban.length > 0) {
-        for (const jawaban of data.existing_jawaban) {
-          // Parse existing jawaban
-          const jawabanArray = jawaban.jawaban.split('|');
-          for (const entry of jawabanArray) {
-            const [soalId, jawabanText] = entry.split(':');
-            if (soalId && jawabanText) {
-              await offlineCache.saveJawaban(parseInt(soalId), jawabanText, {
-                userId: userId,
-                agendaId: agendaId,
-                mapelId: jawaban.id_mapel,
-                isRagu: false
-              });
-            }
-          }
-        }
-      }
-      
       // Simpan metadata
       localStorage.setItem('offline_last_update', new Date().toISOString());
       localStorage.setItem('offline_total_soal', totalSoal);
@@ -5874,17 +5861,20 @@ async function downloadAllOfflineData(agendaId, userId) {
       // Tampilkan success modal
       showOfflineDownloadSuccess(totalSoal, data.mapel_list.length);
       
+      // Update status di dashboard
+      setTimeout(updateOfflineStatus, 1000);
+      
       return true;
+    } else {
+      showLoader(false);
+      showToast('Gagal download data offline: ' + (result.message || 'Unknown error'), 'error');
+      return false;
     }
-    
-    showLoader(false);
-    showToast('Gagal download data offline', 'error');
-    return false;
     
   } catch (error) {
     showLoader(false);
     console.error('Download offline data failed:', error);
-    showToast('Gagal download data offline', 'error');
+    showToast('Gagal download data offline: ' + error.message, 'error');
     return false;
   }
 }
@@ -6303,11 +6293,18 @@ function closeSubmitSuccessModal() {
 // ===== OFFLINE STATUS IN DASHBOARD =====
 
 async function updateOfflineStatus() {
+  // Validasi data user
+  if (!user || !user.id || !user.id_agenda) {
+    console.warn('User data incomplete, skipping offline status update');
+    return;
+  }
+  
   try {
     await offlineCache.ready();
     
     const stats = await offlineCache.getStats();
     
+    // Tampilkan status hanya jika user data valid
     const statusHtml = `
       <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); padding: 15px; border-radius: 12px; margin: 20px; border: 1px solid #bae6fd;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -6338,7 +6335,7 @@ async function updateOfflineStatus() {
         ` : `
         <div style="text-align: center; padding: 10px; color: #64748b; font-size: 13px;">
           <p>Data offline belum tersedia.</p>
-          <button onclick="downloadAllOfflineData(${user.id_agenda}, ${user.id})" 
+          <button onclick="handleDownloadOfflineData()" 
                   style="background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 8px; margin-top: 5px; font-size: 12px; cursor: pointer;">
             📥 Download Sekarang
           </button>
@@ -6476,6 +6473,34 @@ window.startExam = async function(mapelId) {
     return originalStartExam(mapelId);
   }
 };
+  async function handleDownloadOfflineData() {
+  if (!user || !user.id) {
+    showToast('User tidak ditemukan. Silakan login ulang.', 'error');
+    return;
+  }
+  
+  if (!user.id_agenda) {
+    showToast('Tidak ada agenda ujian untuk user ini.', 'error');
+    return;
+  }
+  
+  showLoader(true, 'Memulai download data offline...');
+  
+  try {
+    const success = await downloadAllOfflineData(user.id_agenda, user.id);
+    if (success) {
+      showToast('Download berhasil! Data tersedia untuk mode offline.', 'success');
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    showToast('Gagal download data offline: ' + error.message, 'error');
+  } finally {
+    showLoader(false);
+  }
+}
+
+// Export fungsi ini agar bisa dipanggil dari HTML
+window.handleDownloadOfflineData = handleDownloadOfflineData;
 
 // ===== EXPORT FUNCTIONS =====
 window.downloadAllOfflineData = downloadAllOfflineData;
