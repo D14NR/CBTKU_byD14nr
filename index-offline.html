@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <title>CBTKU 2026 - Mode Offline</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📱</text></svg>">
+  <meta name="theme-color" content="#10b981">
+  
+  <!-- Styles -->
+  <style>
+    /* VARIABLES */
+    :root {
+      --primary: #10b981;
+      --primary-dark: #059669;
+      --primary-light: #d1fae5;
+      --offline: #f59e0b;
+      --online: #10b981;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* RESET */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    
+    .hidden { display: none !important; }
+    
+    /* LAYOUT */
+    .app-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* HEADER */
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 5px solid var(--primary);
+    }
+    
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .header-title h1 {
+      font-size: 1.5rem;
+      color: var(--primary);
+      margin: 0;
+    }
+    
+    .status-badge {
+      background: var(--offline);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    .status-badge.online {
+      background: var(--online);
+    }
+    
+    /* MAIN CONTENT */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    /* CARD STYLES */
+    .card {
+      background: white;
+      border-radius: var(--radius);
+      padding: 25px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
+    
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid var(--primary-light);
+    }
+    
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .card-icon {
+      font-size: 1.5rem;
+    }
+    
+    /* AGENDA INFO */
+    .agenda-info {
+      background: linear-gradient(135deg, var(--primary-light) 0%, #ffffff 100%);
+    }
+    
+    .agenda-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+    
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    
+    .info-label {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    
+    .info-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    
+    /* MAPEL LIST */
+    .mapel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+      margin-top: 15px;
+    }
+    
+    .mapel-card {
+      background: white;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .mapel-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+    
+    .mapel-card.completed {
+      border-color: var(--online);
+      background: var(--primary-light);
+    }
+    
+    .mapel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+    
+    .mapel-name {
+      font-weight: 700;
+      font-size: 1.125rem;
+      color: var(--text-main);
+    }
+    
+    .mapel-stats {
+      display: flex;
+      gap: 10px;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin-top: 10px;
+    }
+    
+    /* BUTTONS */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+    }
+    
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+    
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--border);
+      color: var(--text-muted);
+    }
+    
+    .btn-outline:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    
+    .btn-sm {
+      padding: 8px 16px;
+      font-size: 0.8125rem;
+    }
+    
+    /* LOADING STATES */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 15px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* MODAL */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    
+    .modal-content {
+      background: white;
+      border-radius: var(--radius);
+      padding: 30px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+    
+    /* TOKEN INPUT */
+    .token-input {
+      width: 100%;
+      padding: 15px;
+      font-size: 1.5rem;
+      text-align: center;
+      letter-spacing: 5px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      margin: 20px 0;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    
+    .token-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    
+    /* STATS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    
+    .stat-card {
+      background: var(--primary-light);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .stat-number {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 5px;
+    }
+    
+    .stat-label {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    
+    /* ALERTS */
+    .alert {
+      padding: 15px;
+      border-radius: var(--radius);
+      margin: 15px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .alert-success {
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      border: 1px solid var(--primary);
+    }
+    
+    .alert-warning {
+      background: #fef3c7;
+      color: #d97706;
+      border: 1px solid #f59e0b;
+    }
+    
+    .alert-error {
+      background: #fee2e2;
+      color: #dc2626;
+      border: 1px solid #ef4444;
+    }
+    
+    /* FOOTER */
+    .footer {
+      margin-top: 40px;
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      border-top: 1px solid var(--border);
+    }
+    
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .app-container {
+        padding: 10px;
+      }
+      
+      .header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+      }
+      
+      .mapel-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .agenda-details {
+        grid-template-columns: 1fr;
+      }
+      
+      .token-input {
+        font-size: 1.25rem;
+        padding: 12px;
+      }
+    }
+    
+    /* UTILITIES */
+    .text-center { text-align: center; }
+    .mt-1 { margin-top: 10px; }
+    .mt-2 { margin-top: 20px; }
+    .mb-1 { margin-bottom: 10px; }
+    .mb-2 { margin-bottom: 20px; }
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-1 { gap: 10px; }
+    .gap-2 { gap: 20px; }
+    .w-full { width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-title">
+        <h1>CBTKU 2026</h1>
+        <div class="status-badge" id="connection-status">
+          <span class="status-icon">📱</span>
+          <span class="status-text">Mode Offline</span>
+        </div>
+      </div>
+      
+      <div class="flex gap-1">
+        <button class="btn btn-outline btn-sm" onclick="window.location.href='/'">
+          ⬅️ Kembali ke Mode Online
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="refreshData()">
+          🔄 Refresh Data
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+      <!-- AGENDA INFO -->
+      <div class="card agenda-info" id="agenda-info">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">📅</span>
+            <span>Informasi Agenda</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="info-label">Status:</span>
+            <span class="info-value" id="agenda-status">Loading...</span>
+          </div>
+        </div>
+        
+        <div id="agenda-details">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Memuat informasi agenda...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- PACKAGE INFO -->
+      <div class="card" id="package-info">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">📦</span>
+            <span>Paket Ujian</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="downloadPackage()" id="btn-download">
+            ⬇️ Download Paket
+          </button>
+        </div>
+        
+        <div id="package-details">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Memeriksa paket ujian...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- MAPEL LIST -->
+      <div class="card" id="mapel-section">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">📚</span>
+            <span>Mata Pelajaran</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="info-label">Total:</span>
+            <span class="info-value" id="mapel-count">0</span>
+          </div>
+        </div>
+        
+        <div id="mapel-list">
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Memuat daftar mata pelajaran...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATISTICS -->
+      <div class="card" id="stats-section">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">📊</span>
+            <span>Statistik</span>
+          </div>
+        </div>
+        
+        <div class="stats-grid" id="stats-grid">
+          <!-- Stats akan diisi oleh JavaScript -->
+        </div>
+      </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>Sistem Ujian CBTKU 2026 - Mode Offline</p>
+      <p class="mt-1">Data tersimpan secara lokal, aman, dan dapat diakses tanpa internet</p>
+    </footer>
+  </div>
+
+  <!-- TOKEN MODAL -->
+  <div class="modal-backdrop hidden" id="token-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Verifikasi Token</div>
+        <button class="modal-close" onclick="closeTokenModal()">&times;</button>
+      </div>
+      
+      <div class="text-center mb-2">
+        <p>Masukkan token ujian untuk memulai ujian:</p>
+        <input type="text" 
+               class="token-input" 
+               id="token-input"
+               placeholder="ABCDEF"
+               maxlength="6"
+               oninput="this.value = this.value.toUpperCase()">
+        
+        <div class="alert alert-warning mt-2">
+          ⚠️ Token hanya diperlukan sekali untuk validasi offline
+        </div>
+      </div>
+      
+      <div class="flex gap-1">
+        <button class="btn btn-outline w-full" onclick="closeTokenModal()">
+          Batal
+        </button>
+        <button class="btn btn-primary w-full" onclick="verifyTokenAndStart()">
+          Verifikasi & Mulai Ujian
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADING MODAL -->
+  <div class="modal-backdrop hidden" id="loading-modal">
+    <div class="modal-content text-center">
+      <div class="spinner"></div>
+      <h3 class="mt-2" id="loading-title">Memproses...</h3>
+      <p id="loading-message">Mohon tunggu sebentar</p>
+      <div class="mt-2">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <p class="text-muted mt-1" id="progress-text">0%</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="/lib/cache-manager.js"></script>
+  <script src="/lib/offline-validator.js"></script>
+  <script src="/lib/image-preloader.js"></script>
+  
+  <script>
+    // GLOBAL STATE
+    let examCache = null;
+    let offlineValidator = null;
+    let imagePreloader = null;
+    let currentUser = null;
+    let currentAgendaId = null;
+    let selectedMapelId = null;
+
+    // API CONFIG
+    const API_BASE = window.location.origin;
+    const API_OFFLINE = `${API_BASE}/api-offline`;
+
+    // INITIALIZE APP
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initializeApp();
+      loadUserData();
+      checkConnection();
+      
+      // Update connection status setiap 10 detik
+      setInterval(checkConnection, 10000);
+    });
+
+    /**
+     * Initialize aplikasi
+     */
+    async function initializeApp() {
+      showLoading('Menginisialisasi aplikasi...');
+      
+      try {
+        // 1. Initialize cache manager
+        examCache = new ExamCacheManager();
+        await examCache.init();
+        
+        // 2. Load user dari session storage
+        const sessionData = sessionStorage.getItem('cbt_sess_offline');
+        if (sessionData) {
+          currentUser = JSON.parse(sessionData);
+          currentAgendaId = currentUser.agenda_id;
+          
+          // 3. Initialize validator dengan agenda
+          offlineValidator = new OfflineValidator(examCache);
+          await offlineValidator.init(currentAgendaId);
+          
+          // 4. Initialize image preloader
+          imagePreloader = new ImagePreloader(examCache);
+          
+          hideLoading();
+          updateUI();
+          
+        } else {
+          // User belum login, redirect ke mode online
+          hideLoading();
+          showAlert('Anda belum login. Redirect ke mode online...', 'warning');
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+        }
+        
+      } catch (error) {
+        hideLoading();
+        showAlert(`Error inisialisasi: ${error.message}`, 'error');
+        console.error('Initialize error:', error);
+      }
+    }
+
+    /**
+     * Load user data dan update UI
+     */
+    async function loadUserData() {
+      if (!currentUser || !offlineValidator) return;
+      
+      try {
+        // 1. Update agenda info
+        const agendaInfo = offlineValidator.getAgendaInfo();
+        const timeCheck = offlineValidator.validateAgendaTime();
+        
+        document.getElementById('agenda-status').textContent = 
+          timeCheck.valid ? 'Aktif' : timeCheck.status === 'not_started' ? 'Belum Dimulai' : 'Berakhir';
+        
+        document.getElementById('agenda-status').style.color = 
+          timeCheck.valid ? '#10b981' : '#ef4444';
+        
+        document.getElementById('agenda-details').innerHTML = `
+          <div class="agenda-details">
+            <div class="info-item">
+              <span class="info-label">Nama Agenda</span>
+              <span class="info-value">${agendaInfo.agenda_ujian || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Token</span>
+                            <span class="info-value">${agendaInfo.token_ujian || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Mulai</span>
+              <span class="info-value">${formatDate(agendaInfo.tgljam_mulai)}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Selesai</span>
+              <span class="info-value">${formatDate(agendaInfo.tgljam_selesai)}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Durasi</span>
+              <span class="info-value">${agendaInfo.durasi_ujian || 0} menit</span>
+            </div>
+          </div>
+        `;
+        
+        // 2. Check package status
+        const hasPackage = await examCache.hasExamPackage(currentAgendaId);
+        updatePackageUI(hasPackage);
+        
+        // 3. Load mapel list
+        const mapelInfo = await offlineValidator.getAllMapelInfo();
+        updateMapelList(mapelInfo);
+        
+        // 4. Update statistics
+        updateStatistics();
+        
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        showAlert('Gagal memuat data', 'error');
+      }
+    }
+
+    /**
+     * Update package UI
+     */
+    async function updatePackageUI(hasPackage) {
+      const packageDetails = document.getElementById('package-details');
+      const downloadBtn = document.getElementById('btn-download');
+      
+      if (hasPackage) {
+        const packageData = await examCache.getExamPackage(currentAgendaId);
+        const stats = await examCache.getStats();
+        
+        packageDetails.innerHTML = `
+          <div class="agenda-details">
+            <div class="info-item">
+              <span class="info-label">Status</span>
+              <span class="info-value" style="color:#10b981;">✅ Terdownload</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Versi</span>
+              <span class="info-value">${packageData?.metadata?.package_version || '1.0'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Soal</span>
+              <span class="info-value">${packageData?.metadata?.total_questions || 0}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Gambar</span>
+              <span class="info-value">${packageData?.metadata?.total_images || 0}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Ukuran Cache</span>
+              <span class="info-value">${formatBytes(stats.total_size)}</span>
+            </div>
+          </div>
+        `;
+        
+        downloadBtn.innerHTML = '🔄 Update Paket';
+        downloadBtn.onclick = downloadPackage;
+        
+      } else {
+        packageDetails.innerHTML = `
+          <div class="text-center">
+            <p>Paket ujian belum didownload.</p>
+            <p class="text-muted mt-1">Download paket untuk dapat mengerjakan ujian offline.</p>
+            <div class="alert alert-warning mt-2">
+              ⚠️ Pastikan terhubung ke internet untuk download pertama kali
+            </div>
+          </div>
+        `;
+        
+        downloadBtn.innerHTML = '⬇️ Download Paket';
+        downloadBtn.onclick = downloadPackage;
+      }
+    }
+
+    /**
+     * Update mapel list
+     */
+    function updateMapelList(mapelList) {
+      const mapelListContainer = document.getElementById('mapel-list');
+      const mapelCount = document.getElementById('mapel-count');
+      
+      mapelCount.textContent = mapelList.length;
+      
+      if (mapelList.length === 0) {
+        mapelListContainer.innerHTML = `
+          <div class="text-center">
+            <p>Tidak ada mata pelajaran tersedia.</p>
+            <p class="text-muted mt-1">Download paket ujian terlebih dahulu.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      mapelListContainer.innerHTML = `
+        <div class="mapel-grid">
+          ${mapelList.map(mapel => `
+            <div class="mapel-card ${mapel.has_questions ? '' : 'disabled'}" 
+                 onclick="${mapel.has_questions ? `selectMapel('${mapel.id}')` : ''}">
+              <div class="mapel-header">
+                <div class="mapel-name">${mapel.nama_mata_pelajaran}</div>
+                <div class="status-badge ${mapel.has_questions ? 'online' : ''}">
+                  ${mapel.has_questions ? '✅ Siap' : '⏳ Loading'}
+                </div>
+              </div>
+              
+              <div class="mapel-stats">
+                <span>📝 ${mapel.questions_count || 0} Soal</span>
+                <span>⏰ ${mapel.durasi_ujian || 0} Menit</span>
+              </div>
+              
+              ${mapel.has_questions ? `
+                <div class="mt-2">
+                  <button class="btn btn-primary btn-sm w-full" onclick="event.stopPropagation(); selectMapel('${mapel.id}')">
+                    Mulai Ujian
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    /**
+     * Update statistics
+     */
+    async function updateStatistics() {
+      const statsGrid = document.getElementById('stats-grid');
+      
+      try {
+        const cacheStats = await examCache.getStats();
+        const packageData = await examCache.getExamPackage(currentAgendaId);
+        
+        statsGrid.innerHTML = `
+          <div class="stat-card">
+            <div class="stat-number">${packageData?.mapel_list?.length || 0}</div>
+            <div class="stat-label">Mata Pelajaran</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">${packageData?.metadata?.total_questions || 0}</div>
+            <div class="stat-label">Total Soal</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">${formatBytes(cacheStats.total_size)}</div>
+            <div class="stat-label">Ukuran Cache</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">${cacheStats.questions || 0}</div>
+            <div class="stat-label">Soal Tersimpan</div>
+          </div>
+        `;
+        
+      } catch (error) {
+        statsGrid.innerHTML = `
+          <div class="text-center w-full">
+            <p class="text-muted">Statistik tidak tersedia</p>
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * Download exam package
+     */
+    async function downloadPackage() {
+      if (!navigator.onLine) {
+        showAlert('Tidak terhubung ke internet. Hubungkan ke WiFi/koneksi data untuk download.', 'error');
+        return;
+      }
+      
+      showLoading('Memulai download paket ujian...', true);
+      
+      try {
+        // 1. Validate access first
+        const validateResult = await fetch(`${API_OFFLINE}/validate-package-access`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agenda_id: currentAgendaId,
+            user_id: currentUser.id,
+            username: currentUser.nis_username
+          })
+        });
+        
+        const validation = await validateResult.json();
+        
+        if (!validation.success || !validation.valid) {
+          hideLoading();
+          showAlert(validation.message || 'Tidak dapat mengakses paket ujian', 'error');
+          return;
+        }
+        
+        updateProgress(25, 'Validasi akses berhasil...');
+        
+        // 2. Download package
+        updateProgress(50, 'Mendownload paket ujian...');
+        
+        const packageResponse = await fetch(`${API_OFFLINE}/exam-package/${currentAgendaId}`);
+        const packageResult = await packageResponse.json();
+        
+        if (!packageResult.success) {
+          hideLoading();
+          showAlert(packageResult.message || 'Gagal mendownload paket', 'error');
+          return;
+        }
+        
+        updateProgress(75, 'Menyimpan paket ke cache lokal...');
+        
+        // 3. Save to cache
+        await examCache.saveExamPackage(currentAgendaId, packageResult.data);
+        
+        // 4. Reinitialize validator with new package
+        offlineValidator = new OfflineValidator(examCache);
+        await offlineValidator.init(currentAgendaId);
+        
+        updateProgress(100, 'Paket berhasil didownload!');
+        
+        setTimeout(() => {
+          hideLoading();
+          showAlert('Paket ujian berhasil didownload!', 'success');
+          loadUserData();
+        }, 1000);
+        
+      } catch (error) {
+        hideLoading();
+        showAlert(`Error download: ${error.message}`, 'error');
+        console.error('Download error:', error);
+      }
+    }
+
+    /**
+     * Select mapel untuk ujian
+     */
+    function selectMapel(mapelId) {
+      selectedMapelId = mapelId;
+      showTokenModal();
+    }
+
+    /**
+     * Show token verification modal
+     */
+    function showTokenModal() {
+      const modal = document.getElementById('token-modal');
+      const input = document.getElementById('token-input');
+      
+      input.value = '';
+      modal.classList.remove('hidden');
+      
+      setTimeout(() => input.focus(), 100);
+    }
+
+    /**
+     * Close token modal
+     */
+    function closeTokenModal() {
+      document.getElementById('token-modal').classList.add('hidden');
+      selectedMapelId = null;
+    }
+
+    /**
+     * Verify token and start exam
+     */
+    async function verifyTokenAndStart() {
+      const token = document.getElementById('token-input').value.trim().toUpperCase();
+      
+      if (!token) {
+        showAlert('Masukkan token terlebih dahulu', 'error');
+        return;
+      }
+      
+      showLoading('Memverifikasi token...');
+      
+      try {
+        const tokenValid = offlineValidator.validateToken(token);
+        
+        if (!tokenValid.valid) {
+          hideLoading();
+          showAlert(tokenValid.message || 'Token tidak valid', 'error');
+          return;
+        }
+        
+        // Validate agenda time
+        const timeValid = offlineValidator.validateAgendaTime();
+        if (!timeValid.valid) {
+          hideLoading();
+          showAlert(timeValid.message || 'Waktu ujian tidak valid', 'error');
+          return;
+        }
+        
+        // Validate mapel access
+        const mapelAccess = await offlineValidator.validateMapelAccess(selectedMapelId);
+        if (!mapelAccess.valid) {
+          hideLoading();
+          showAlert(mapelAccess.message || 'Akses mapel tidak valid', 'error');
+          return;
+        }
+        
+        hideLoading();
+        closeTokenModal();
+        
+        // Save token to session
+        sessionStorage.setItem('exam_token', token);
+        sessionStorage.setItem('selected_mapel', selectedMapelId);
+        
+        // Redirect to exam page
+        window.location.href = `/exam?mode=offline&agenda=${currentAgendaId}&mapel=${selectedMapelId}`;
+        
+      } catch (error) {
+        hideLoading();
+        showAlert(`Error verifikasi: ${error.message}`, 'error');
+        console.error('Token verification error:', error);
+      }
+    }
+
+    /**
+     * Check connection status
+     */
+    function checkConnection() {
+      const statusEl = document.getElementById('connection-status');
+      
+      if (navigator.onLine) {
+        statusEl.innerHTML = '<span class="status-icon">🌐</span><span class="status-text">Online</span>';
+        statusEl.classList.add('online');
+      } else {
+        statusEl.innerHTML = '<span class="status-icon">📱</span><span class="status-text">Offline</span>';
+        statusEl.classList.remove('online');
+      }
+    }
+
+    /**
+     * Refresh data
+     */
+    function refreshData() {
+      if (navigator.onLine) {
+        showAlert('Menyinkronkan data...', 'info');
+        loadUserData();
+      } else {
+        showAlert('Tidak terhubung ke internet', 'warning');
+      }
+    }
+
+    /**
+     * Update UI after initialization
+     */
+    function updateUI() {
+      // Update connection status
+      checkConnection();
+      
+      // Update time every second
+      setInterval(() => {
+        if (offlineValidator) {
+          const timeCheck = offlineValidator.validateAgendaTime();
+          document.getElementById('agenda-status').textContent = 
+            timeCheck.valid ? 'Aktif' : timeCheck.status === 'not_started' ? 'Belum Dimulai' : 'Berakhir';
+        }
+      }, 1000);
+    }
+
+    /**
+     * Show loading modal
+     */
+    function showLoading(message, showProgress = false) {
+      const modal = document.getElementById('loading-modal');
+      const title = document.getElementById('loading-title');
+      const msg = document.getElementById('loading-message');
+      const progress = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+      
+      title.textContent = 'Memproses...';
+      msg.textContent = message;
+      
+      if (showProgress) {
+        progress.style.width = '0%';
+        progressText.textContent = '0%';
+      } else {
+        progress.style.width = '100%';
+        progressText.textContent = '';
+      }
+      
+      modal.classList.remove('hidden');
+    }
+
+    /**
+     * Update progress bar
+     */
+    function updateProgress(percent, message) {
+      const progress = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+      const msg = document.getElementById('loading-message');
+      
+      progress.style.width = `${percent}%`;
+      progressText.textContent = `${percent}%`;
+      
+      if (message) {
+        msg.textContent = message;
+      }
+    }
+
+    /**
+     * Hide loading modal
+     */
+    function hideLoading() {
+      document.getElementById('loading-modal').classList.add('hidden');
+    }
+
+    /**
+     * Show alert message
+     */
+    function showAlert(message, type = 'info') {
+      // Create alert element
+      const alertEl = document.createElement('div');
+      alertEl.className = `alert alert-${type}`;
+      alertEl.innerHTML = `
+        <span>${type === 'error' ? '❌' : type === 'warning' ? '⚠️' : type === 'success' ? '✅' : 'ℹ️'}</span>
+        <span>${message}</span>
+      `;
+      
+      // Insert after header
+      const header = document.querySelector('.header');
+      header.parentNode.insertBefore(alertEl, header.nextSibling);
+      
+      // Remove after 5 seconds
+      setTimeout(() => {
+        if (alertEl.parentNode) {
+          alertEl.parentNode.removeChild(alertEl);
+        }
+      }, 5000);
+    }
+
+    /**
+     * Format date to readable string
+     */
+    function formatDate(dateString) {
+      if (!dateString) return '-';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        return dateString;
+      }
+    }
+
+    /**
+     * Format bytes to human readable
+     */
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * Handle offline mode activation
+     */
+    function activateOfflineMode() {
+      if (!navigator.onLine) {
+        showAlert('Mode offline diaktifkan', 'success');
+      }
+    }
+
+    // Handle online/offline events
+    window.addEventListener('online', () => {
+      showAlert('Koneksi internet tersedia', 'success');
+      checkConnection();
+    });
+    
+    window.addEventListener('offline', () => {
+      showAlert('Koneksi internet terputus. Mode offline diaktifkan.', 'warning');
+      checkConnection();
+    });
+
+    // Initialize offline mode
+    activateOfflineMode();
+  </script>
+</body>
+</html>
