@@ -21,3 +21,22 @@
 - POST /api/get-soal
 - POST /api/save-jawaban
 - POST /api/selesai-ujian
+
+package.json
+{
+  "name": "cbt-2026",
+  "version": "1.0.0",
+  "description": "Aplikasi CBT-2026",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2"
+  }
+}
