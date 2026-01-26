@@ -1,22 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/api-offline/(.*)", "destination": "/api-offline/index.js" },
-    { 
-      "source": "/exam",
-      "destination": "/index-offline.html" 
-    },
-    { 
-      "source": "/", 
-      "destination": "/index.html" 
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600" }
-      ]
-    }
+    { "source": "/api/(.*)", "destination": "/api/index.js" }
   ]
 }
