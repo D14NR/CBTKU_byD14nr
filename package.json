@@ -1,17 +1,26 @@
 {
-  "name": "cbt-2026",
-  "version": "1.0.0",
-  "description": "Aplikasi CBT-2026",
-  "main": "api/index.js",
+  "name": "cbt-ujian-online",
+  "version": "2.0.0",
+  "description": "Sistem Ujian Online CBT dengan optimasi 500+ user",
+  "main": "index.js",
   "scripts": {
-    "start": "node api/index.js"
-  },
-  "engines": {
-    "node": "20.x"
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "test": "echo \"No test specified\" && exit 0",
+    "test:load": "node test-load.js",
+    "cleanup": "curl -X POST http://localhost:3000/api/cleanup-answers",
+    "vercel-build": "echo 'Building for Vercel...'"
   },
   "dependencies": {
+    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2"
+    "dotenv": "^16.0.3",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
