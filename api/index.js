@@ -696,6 +696,480 @@ router.get('/health', (req, res) => {
   });
 });
 
+// ==================== OFFLINE-FIRST ENDPOINTS (BARU) ====================
+
+/**
+ * POST /api/download-all-exam-data
+ * Download SEMUA data untuk offline usage
+ */
+router.post('/download-all-exam-data', async (req, res) => {
+  const { agenda_id, peserta_id } = req.body || {};
+  
+  try {
+    if (!agenda_id || !peserta_id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'agenda_id & peserta_id wajib' 
+      });
+    }
+
+    console.log(`[OFFLINE] Download data untuk agenda ${agenda_id}, user ${peserta_id}`);
+    
+    // 1. Get user profile
+    const userRes = await supabaseRequest('peserta', 'GET', {
+      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status',
+      id: `eq.${peserta_id}`,
+      limit: 1
+    });
+    
+    if (!userRes || userRes.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User tidak ditemukan' 
+      });
+    }
+    
+    const user = userRes[0];
+    
+    // 2. Get agenda details
+    const agendaRes = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'id,agenda_ujian,tgljam_mulai,tgljam_selesai,token_ujian',
+      id: `eq.${agenda_id}`,
+      limit: 1
+    });
+    
+    if (!agendaRes || agendaRes.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Agenda tidak ditemukan' 
+      });
+    }
+    
+    const agenda = agendaRes[0];
+    
+    // 3. Get all mapel for this agenda
+    const mapelRes = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id,nama_mata_pelajaran,jumlah_soal,durasi_ujian,status_mapel',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: 'eq.Siap',
+      order: 'id.asc'
+    });
+    
+    const mapelList = mapelRes || [];
+    
+    // 4. Get ALL soal for all mapel
+    const allSoal = {};
+    
+    for (const mapel of mapelList) {
+      try {
+        const soalRes = await supabaseRequest('bank_soal', 'GET', {
+          select: 'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
+          id_mapel: `eq.${mapel.id}`,
+          order: 'no_soal.asc',
+          limit: 200
+        });
+        
+        if (soalRes && soalRes.length > 0) {
+          // Add metadata to each soal
+          const soalWithMeta = soalRes.map(soal => ({
+            ...soal,
+            mapel_id: mapel.id,
+            mapel_nama: mapel.nama_mata_pelajaran,
+            agenda_id: parseInt(agenda_id),
+            durasi_ujian: mapel.durasi_ujian
+          }));
+          
+          allSoal[mapel.id] = soalWithMeta;
+          console.log(`[OFFLINE] Downloaded ${soalRes.length} soal for mapel ${mapel.id}`);
+        } else {
+          allSoal[mapel.id] = [];
+        }
+      } catch (error) {
+        console.error(`[OFFLINE] Error downloading soal for mapel ${mapel.id}:`, error);
+        allSoal[mapel.id] = [];
+      }
+    }
+    
+    // 5. Get existing jawaban (if any)
+    const jawabanRes = await supabaseRequest('jawaban', 'GET', {
+      select: 'id_mapel,jawaban,status,tgljam_mulai',
+      id_agenda: `eq.${agenda_id}`,
+      id_peserta: `eq.${peserta_id}`
+    });
+    
+    // 6. Prepare response
+    const totalSoal = Object.values(allSoal).reduce((sum, soalList) => sum + soalList.length, 0);
+    
+    const response = {
+      success: true,
+      data: {
+        user: safeUser(user), // Gunakan safeUser untuk hapus password
+        agenda: agenda,
+        mapel_list: mapelList,
+        soal_by_mapel: allSoal,
+        existing_jawaban: jawabanRes || [],
+        summary: {
+          total_mapel: mapelList.length,
+          total_soal: totalSoal,
+          total_size_bytes: JSON.stringify(allSoal).length
+        }
+      },
+      metadata: {
+        downloaded_at: new Date().toISOString(),
+        cache_version: '1.0',
+        cache_ttl: 24 * 60 * 60, // 24 jam dalam detik
+        agenda_id: parseInt(agenda_id),
+        user_id: parseInt(peserta_id)
+      }
+    };
+    
+    console.log(`[OFFLINE] Download completed: ${totalSoal} soal, ${mapelList.length} mapel`);
+    
+    res.json(response);
+    
+  } catch (e) {
+    console.error('[OFFLINE] Download error:', e);
+    res.status(500).json({ 
+      success: false, 
+      message: e.message,
+      code: 'DOWNLOAD_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/final-submit-offline
+ * Submit final jawaban dari offline cache
+ */
+router.post('/final-submit-offline', async (req, res) => {
+  const { 
+    pid, 
+    aid, 
+    mid, 
+    jawaban_map,
+    waktu_mulai,
+    waktu_selesai,
+    duration_used,
+    device_info 
+  } = req.body || {};
+  
+  try {
+    if (!pid || !aid || !mid || !jawaban_map) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Data tidak lengkap' 
+      });
+    }
+
+    console.log(`[OFFLINE-SUBMIT] User ${pid}, Mapel ${mid}, ${Object.keys(jawaban_map).length} jawaban`);
+    
+    // 1. Cek apakah sudah ada record
+    const existingRes = await supabaseRequest('jawaban', 'GET', {
+      select: 'id,status,jawaban',
+      id_peserta: `eq.${pid}`,
+      id_mapel: `eq.${mid}`,
+      id_agenda: `eq.${aid}`,
+      limit: 1
+    });
+    
+    // 2. Get metadata untuk snapshot
+    const [userRes, agendaRes, mapelRes] = await Promise.all([
+      supabaseRequest('peserta', 'GET', { 
+        select: 'nama_peserta', 
+        id: `eq.${pid}`, 
+        limit: 1 
+      }),
+      supabaseRequest('agenda_ujian', 'GET', { 
+        select: 'agenda_ujian', 
+        id: `eq.${aid}`, 
+        limit: 1 
+      }),
+      supabaseRequest('mata_pelajaran', 'GET', { 
+        select: 'nama_mata_pelajaran', 
+        id: `eq.${mid}`, 
+        limit: 1 
+      })
+    ]);
+    
+    // 3. Convert jawaban_map ke format string
+    const jawabanArray = Object.entries(jawaban_map).map(([soal_id, jawaban]) => 
+      `${soal_id}:${jawaban}`
+    );
+    const jawabanString = jawabanArray.join('|');
+    
+    // 4. Hitung statistik
+    const totalSoal = Object.keys(jawaban_map).length;
+    const answered = Object.values(jawaban_map).filter(j => j && j !== '-').length;
+    const percentage = totalSoal > 0 ? Math.round((answered / totalSoal) * 100) : 0;
+    
+    if (existingRes && existingRes.length > 0) {
+      // Update existing
+      const existing = existingRes[0];
+      
+      // Merge dengan existing jawaban jika ada
+      let finalJawaban = jawabanString;
+      if (existing.jawaban && existing.status !== 'Selesai') {
+        const existingMap = {};
+        existing.jawaban.split('|').forEach(entry => {
+          const [soalId, jawaban] = entry.split(':');
+          if (soalId && jawaban) {
+            existingMap[soalId] = jawaban;
+          }
+        });
+        
+        // Merge (new overwrites old)
+        Object.assign(existingMap, jawaban_map);
+        
+        finalJawaban = Object.entries(existingMap)
+          .map(([soalId, jawaban]) => `${soalId}:${jawaban}`)
+          .join('|');
+      }
+      
+      await supabaseRequest('jawaban', 'PATCH', {
+        id_peserta: `eq.${pid}`,
+        id_mapel: `eq.${mid}`,
+        id_agenda: `eq.${aid}`
+      }, {
+        jawaban: finalJawaban,
+        status: 'Selesai',
+        tgljam_selesai: waktu_selesai || new Date().toISOString(),
+        durasi_digunakan: duration_used,
+        device_info: device_info || null,
+        submitted_offline: true,
+        offline_submit_time: new Date().toISOString(),
+        statistik: {
+          total_soal: totalSoal,
+          dijawab: answered,
+          persentase: percentage,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+    } else {
+      // Insert baru
+      await supabaseRequest('jawaban', 'POST', null, {
+        id_peserta: pid,
+        id_agenda: aid,
+        id_mapel: mid,
+        nama_peserta_snap: userRes?.[0]?.nama_peserta || '-',
+        nama_agenda_snap: agendaRes?.[0]?.agenda_ujian || '-',
+        nama_mapel_snap: mapelRes?.[0]?.nama_mata_pelajaran || '-',
+        jawaban: jawabanString,
+        tgljam_login: waktu_mulai || new Date().toISOString(),
+        tgljam_mulai: waktu_mulai || new Date().toISOString(),
+        tgljam_selesai: waktu_selesai || new Date().toISOString(),
+        status: 'Selesai',
+        durasi_digunakan: duration_used,
+        device_info: device_info || null,
+        submitted_offline: true,
+        offline_submit_time: new Date().toISOString(),
+        statistik: {
+          total_soal: totalSoal,
+          dijawab: answered,
+          persentase: percentage,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Jawaban berhasil disubmit',
+      statistik: {
+        total: totalSoal,
+        dijawab: answered,
+        persentase: percentage
+      },
+      submitted_at: new Date().toISOString()
+    });
+    
+  } catch (e) {
+    console.error('[OFFLINE-SUBMIT] Error:', e);
+    
+    res.status(500).json({ 
+      success: false, 
+      message: e.message,
+      code: 'SUBMIT_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/save-jawaban-batch
+ * Simpan jawaban dalam BATCH (untuk auto-sync)
+ */
+router.post('/save-jawaban-batch', async (req, res) => {
+  const { pid, aid, mid, jawaban_map } = req.body || {};
+  
+  try {
+    if (!pid || !aid || !mid || !jawaban_map) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Data tidak lengkap' 
+      });
+    }
+
+    console.log(`[BATCH-SAVE] User ${pid}, Mapel ${mid}, ${Object.keys(jawaban_map).length} jawaban`);
+    
+    // Cek apakah sudah ada record jawaban
+    const existing = await supabaseRequest('jawaban', 'GET', {
+      select: 'id,jawaban',
+      id_peserta: `eq.${pid}`,
+      id_mapel: `eq.${mid}`,
+      id_agenda: `eq.${aid}`,
+      limit: 1
+    });
+
+    if (existing && existing.length > 0) {
+      // Parse existing jawaban
+      const existingJawaban = existing[0].jawaban.split('|');
+      const existingMap = {};
+      
+      existingJawaban.forEach(entry => {
+        const [soalId, jawaban] = entry.split(':');
+        if (soalId && jawaban) {
+          existingMap[soalId] = jawaban;
+        }
+      });
+      
+      // Merge dengan jawaban baru
+      Object.assign(existingMap, jawaban_map);
+      
+      // Convert back to string
+      const mergedJawaban = Object.entries(existingMap)
+        .map(([soalId, jawaban]) => `${soalId}:${jawaban}`)
+        .join('|');
+      
+      await supabaseRequest('jawaban', 'PATCH', {
+        id_peserta: `eq.${pid}`,
+        id_mapel: `eq.${mid}`,
+        id_agenda: `eq.${aid}`
+      }, {
+        jawaban: mergedJawaban,
+        last_sync: new Date().toISOString()
+      });
+      
+    } else {
+      // Get metadata untuk insert baru
+      const [userRes, agendaRes, mapelRes] = await Promise.all([
+        supabaseRequest('peserta', 'GET', { 
+          select: 'nama_peserta', 
+          id: `eq.${pid}`, 
+          limit: 1 
+        }),
+        supabaseRequest('agenda_ujian', 'GET', { 
+          select: 'agenda_ujian', 
+          id: `eq.${aid}`, 
+          limit: 1 
+        }),
+        supabaseRequest('mata_pelajaran', 'GET', { 
+          select: 'nama_mata_pelajaran', 
+          id: `eq.${mid}`, 
+          limit: 1 
+        })
+      ]);
+      
+      const jawabanString = Object.entries(jawaban_map)
+        .map(([soalId, jawaban]) => `${soalId}:${jawaban}`)
+        .join('|');
+      
+      await supabaseRequest('jawaban', 'POST', null, {
+        id_peserta: pid,
+        id_agenda: aid,
+        id_mapel: mid,
+        nama_peserta_snap: userRes?.[0]?.nama_peserta || '-',
+        nama_agenda_snap: agendaRes?.[0]?.agenda_ujian || '-',
+        nama_mapel_snap: mapelRes?.[0]?.nama_mata_pelajaran || '-',
+        jawaban: jawabanString,
+        tgljam_login: new Date().toISOString(),
+        tgljam_mulai: new Date().toISOString(),
+        status: 'Proses',
+        last_sync: new Date().toISOString()
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Jawaban batch berhasil disimpan',
+      count: Object.keys(jawaban_map).length,
+      synced_at: new Date().toISOString()
+    });
+
+  } catch (e) {
+    console.error('[BATCH-SAVE] Error:', e);
+    res.status(500).json({ 
+      success: false, 
+      message: e.message 
+    });
+  }
+});
+
+/**
+ * GET /api/check-offline-data
+ * Cek apakah data offline tersedia
+ */
+router.get('/check-offline-data', async (req, res) => {
+  const { agenda_id, peserta_id } = req.query || {};
+  
+  try {
+    if (!agenda_id || !peserta_id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'agenda_id & peserta_id wajib' 
+      });
+    }
+    
+    // Cek apakah user dan agenda valid
+    const [userRes, agendaRes] = await Promise.all([
+      supabaseRequest('peserta', 'GET', {
+        select: 'id',
+        id: `eq.${peserta_id}`,
+        limit: 1
+      }),
+      supabaseRequest('agenda_ujian', 'GET', {
+        select: 'id',
+        id: `eq.${agenda_id}`,
+        limit: 1
+      })
+    ]);
+    
+    const isValid = userRes && userRes.length > 0 && agendaRes && agendaRes.length > 0;
+    
+    if (!isValid) {
+      return res.json({
+        success: true,
+        available: false,
+        message: 'User atau agenda tidak valid'
+      });
+    }
+    
+    // Cek apakah ada mapel untuk agenda ini
+    const mapelRes = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: 'eq.Siap',
+      limit: 1
+    });
+    
+    const hasMapel = mapelRes && mapelRes.length > 0;
+    
+    res.json({
+      success: true,
+      available: hasMapel,
+      message: hasMapel ? 'Data tersedia untuk download' : 'Tidak ada mapel tersedia',
+      agenda_id: parseInt(agenda_id),
+      user_id: parseInt(peserta_id)
+    });
+    
+  } catch (e) {
+    console.error('[CHECK-OFFLINE] Error:', e);
+    res.status(500).json({ 
+      success: false, 
+      message: e.message 
+    });
+  }
+});
+
 app.use('/api', router);
 
 // Handler untuk route yang tidak ditemukan
@@ -718,11 +1192,12 @@ if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
     console.log(`========================================`);
-    console.log(`🚀 Server CBT Ujian Online`);
+    console.log(`🚀 Server CBT Ujian Online (Offline-First)`);
     console.log(`📍 Port: ${PORT}`);
     console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
     console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
     console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
+    console.log(`📱 Offline endpoints: /download-all-exam-data, /final-submit-offline`);
     console.log(`========================================`);
   });
 }
