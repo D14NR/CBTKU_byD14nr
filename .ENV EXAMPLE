@@ -1,0 +1,10 @@
+# Supabase
+SUPABASE_URL=https://ffitekntuuratjfyccwd.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmaXRla250dXVyYXRqZnljY3dkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODUwNzU0NywiZXhwIjoyMDg0MDgzNTQ3fQ.5GAynFyNRB0IJcOsr1EZSB9p3zbR39jDM4I0zL8Nrao
+
+# Environment
+NODE_ENV=production
+PORT=3000
+
+# Optional: Untuk monitoring
+LOG_LEVEL=info
