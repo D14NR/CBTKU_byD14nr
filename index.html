@@ -2274,6 +2274,7 @@ let dashTimer = null;
 let otpTimer = null;
 let forgotUserId = null;
 let resetToken = null;
+let autoSaveInterval = null;
 
 // Zoom state
 let zoomedImg = null;
@@ -2584,13 +2585,6 @@ function closeCustomConfirm(res) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  const btnConfirmYes = document.getElementById('btn-confirm-yes');
-  if (btnConfirmYes) {
-    btnConfirmYes.onclick = () => closeCustomConfirm(true);
-  }
-});
-
 function getJenisTesColor(jenis) {
   const jenisLower = (jenis || "").toLowerCase().replace(/ /g, '');
   const colors = {
@@ -2831,6 +2825,9 @@ function openZoomModal(imgSrc, imgAlt) {
   
   // Tambah event listener untuk keyboard
   document.addEventListener('keydown', handleZoomKeys);
+  
+  // Simpan reference ke gambar yang di-zoom
+  zoomedImg = document.getElementById('zoomedImage');
 }
 
 function adjustZoom(direction) {
@@ -2850,7 +2847,7 @@ function adjustZoom(direction) {
   }
 }
 
-  function setupImageDrag() {
+function setupImageDrag() {
   let isDragging = false;
   let startX, startY, translateX = 0, translateY = 0;
   
@@ -2929,7 +2926,47 @@ function closeZoomModal(e) {
   }
 }
 
-  function backupAnswersToLocalStorage() {
+function handleZoomKeys(e) {
+  if (e.key === '+' || e.key === '=') {
+    adjustZoom(1);
+    e.preventDefault();
+  } else if (e.key === '-') {
+    adjustZoom(-1);
+    e.preventDefault();
+  } else if (e.key === 'Escape') {
+    closeZoomModal();
+    e.preventDefault();
+  } else if (e.key === '0') {
+    resetZoom();
+    e.preventDefault();
+  }
+}
+
+function resetZoom() {
+  currentZoom = 1;
+  if (zoomedImg) {
+    zoomedImg.style.transform = 'scale(1)';
+    const zoomInfo = document.getElementById('zoomInfo');
+    if (zoomInfo) {
+      zoomInfo.textContent = '100%';
+    }
+  }
+}
+
+function resetImageZoom(button) {
+  const imgContainer = button.closest('.q-img-container');
+  if (imgContainer) {
+    const img = imgContainer.querySelector('.q-img');
+    if (img) {
+      img.style.transform = 'scale(1)';
+      img.style.transformOrigin = 'center';
+      showToast('Zoom direset', 'info');
+    }
+  }
+}
+
+/* LOCAL STORAGE BACKUP FUNCTIONS */
+function backupAnswersToLocalStorage() {
   if (!user || !mapel) return;
   
   const backupData = {
@@ -2944,7 +2981,6 @@ function closeZoomModal(e) {
   console.log('Backup saved to localStorage');
 }
 
-// Fungsi untuk memulihkan dari localStorage
 function restoreFromLocalStorage() {
   if (!user || !mapel) return false;
   
@@ -2983,20 +3019,17 @@ function restoreFromLocalStorage() {
   return false;
 }
 
-// Fungsi untuk auto-save periodik
-let autoSaveInterval = null;
 function startAutoSave() {
   if (autoSaveInterval) clearInterval(autoSaveInterval);
   
   autoSaveInterval = setInterval(() => {
     if (user && mapel && questions.length > 0) {
       backupAnswersToLocalStorage();
-      showToast('Otomatis disimpan', 'info', 'Auto-save', 2000);
+      console.log('Auto-save executed');
     }
   }, 60000); // Auto-save setiap 1 menit
 }
 
-// Fungsi untuk membersihkan backup
 function clearBackup() {
   if (!user || !mapel) return;
   
@@ -3012,54 +3045,8 @@ function clearBackup() {
   console.log('Backup cleared');
 }
 
-function handleZoomKeys(e) {
-  if (e.key === '+' || e.key === '=') {
-    adjustZoom(1);
-    e.preventDefault();
-  } else if (e.key === '-') {
-    adjustZoom(-1);
-    e.preventDefault();
-  } else if (e.key === 'Escape') {
-    closeZoomModal();
-    e.preventDefault();
-  } else if (e.key === '0') {
-    currentZoom = 1;
-    if (zoomedImg) {
-      zoomedImg.style.transform = 'scale(1)';
-      const zoomInfo = document.getElementById('zoomInfo');
-      if (zoomInfo) {
-        zoomInfo.textContent = '100%';
-      }
-    }
-    e.preventDefault();
-  }
-}
-
-function resetZoom() {
-  currentZoom = 1;
-  if (zoomedImg) {
-    zoomedImg.style.transform = 'scale(1)';
-    const zoomInfo = document.getElementById('zoomInfo');
-    if (zoomInfo) {
-      zoomInfo.textContent = '100%';
-    }
-  }
-}
-
-function resetImageZoom(button) {
-  const imgContainer = button.closest('.q-img-container');
-  if (imgContainer) {
-    const img = imgContainer.querySelector('.q-img');
-    if (img) {
-      img.style.transform = 'scale(1)';
-      img.style.transformOrigin = 'center';
-      showToast('Zoom direset', 'info');
-    }
-  }
-}
-
 /* INIT */
-document.addEventListener('DOMContentLoaded', function() {
+function initApp() {
   const sessionData = sessionStorage.getItem('cbt_sess');
   if (sessionData) { 
     try {
@@ -3078,10 +3065,18 @@ document.addEventListener('DOMContentLoaded', function() {
   initPasswordToggles();
   setupImageZoom();
   
+  // Initialize confirm button
+  const btnConfirmYes = document.getElementById('btn-confirm-yes');
+  if (btnConfirmYes) {
+    btnConfirmYes.onclick = () => closeCustomConfirm(true);
+  }
+  
+  // Setup global event listeners
   window.closeCustomAlert = closeCustomAlert;
   window.closeCustomConfirm = closeCustomConfirm;
-});
+}
 
+/* VIEW MANAGEMENT */
 function toggleAuth(mode) {
   const loginForm = document.getElementById('form-login');
   const registerForm = document.getElementById('form-register');
@@ -3117,6 +3112,7 @@ function goView(id) {
     'custom-alert',
     'custom-confirm',
     'modal-detail-jawaban',
+    'modal-forgot-password',
     'imgZoomModal'
   ];
   
@@ -3145,44 +3141,7 @@ function goView(id) {
   }
 }
 
-function confirmLogout() {
-  showCustomConfirm('Yakin ingin keluar dari aplikasi?', doLogout);
-}
-
-function doLogout() {
-  user = null; 
-  agenda = null; 
-  mapel = null;
-  questions = []; 
-  answers = {}; 
-  ragu = {};
-  currentHistoryMapel = null; 
-  currentHistoryQuestions = [];
-  
-  if (timerInt) { 
-    clearInterval(timerInt); 
-    timerInt = null; 
-  }
-  
-  if (violationTimer) { 
-    clearInterval(violationTimer); 
-    violationTimer = null; 
-  }
-  
-  stopAntiCheat();
-  sessionStorage.removeItem('cbt_sess');
-  goView('view-auth');
-  
-  const loginUser = document.getElementById('l_user');
-  const loginPass = document.getElementById('l_pass');
-  if (loginUser) loginUser.value = '';
-  if (loginPass) loginPass.value = '';
-  
-  toggleAuth('login');
-  showToast('Anda telah logout', 'success');
-}
-
-/* AUTH */
+/* AUTHENTICATION FUNCTIONS */
 async function loadAgendas() {
   const selectEl = document.getElementById('r_agenda'); 
   if (!selectEl) return;
@@ -3329,15 +3288,17 @@ async function handleRegister() {
       showToast('Pendaftaran berhasil!', 'success');
       
       user = result.data;
+      sessionStorage.setItem('cbt_sess', JSON.stringify(user));
       
       // Simpan password untuk kartu
       window.lastRegisteredPassword = pass;
       window.lastRegisteredUsername = user.nis_username;
+      originalPassword = pass;
       
       showKartu(
         user, 
         result.nama_agenda || 'Agenda Ujian', 
-        agendaSelect.options[agendaSelect.selectedIndex].dataset.token || 'TOKEN', 
+        result.token_agenda || agendaSelect.options[agendaSelect.selectedIndex].dataset.token || 'TOKEN', 
         "Ujian Umum"
       );
     } else {
@@ -3345,6 +3306,7 @@ async function handleRegister() {
     }
   } catch (error) {
     console.error('Registration error:', error);
+    showUserFriendlyError(error);
   }
 }
 
@@ -3374,6 +3336,7 @@ async function handleLogin() {
       
       // Simpan password untuk kartu
       window.lastLoginPassword = password;
+      originalPassword = password;
       
       showToast('Login berhasil', 'success');
       goDashboard();
@@ -3382,9 +3345,68 @@ async function handleLogin() {
     }
   } catch (error) {
     console.error('Login error:', error);
+    showUserFriendlyError(error);
   }
 }
 
+function confirmLogout() {
+  showCustomConfirm('Yakin ingin keluar dari aplikasi?', doLogout);
+}
+
+function doLogout() {
+  user = null; 
+  agenda = null; 
+  mapel = null;
+  questions = []; 
+  answers = {}; 
+  ragu = {};
+  currentHistoryMapel = null; 
+  currentHistoryQuestions = [];
+  
+  if (timerInt) { 
+    clearInterval(timerInt); 
+    timerInt = null; 
+  }
+  
+  if (violationTimer) { 
+    clearInterval(violationTimer); 
+    violationTimer = null; 
+  }
+  
+  if (dashTimer) {
+    clearInterval(dashTimer);
+    dashTimer = null;
+  }
+  
+  if (esaiTimer) {
+    clearTimeout(esaiTimer);
+    esaiTimer = null;
+  }
+  
+  if (otpTimer) {
+    clearInterval(otpTimer);
+    otpTimer = null;
+  }
+  
+  if (autoSaveInterval) {
+    clearInterval(autoSaveInterval);
+    autoSaveInterval = null;
+  }
+  
+  stopAntiCheat();
+  sessionStorage.removeItem('cbt_sess');
+  goView('view-auth');
+  
+  const loginUser = document.getElementById('l_user');
+  const loginPass = document.getElementById('l_pass');
+  if (loginUser) loginUser.value = '';
+  if (loginPass) loginPass.value = '';
+  
+  toggleAuth('login');
+  showToast('Anda telah logout', 'success');
+}
+
+/* KARTU PESERTA FUNCTIONS */
 function showKartu(userData, agendaName, token, jenisTes) {
   const k_nama = document.getElementById('k_nama');
   const k_sekolah = document.getElementById('k_sekolah');
@@ -3393,29 +3415,11 @@ function showKartu(userData, agendaName, token, jenisTes) {
   const k_token = document.getElementById('k_token');
   const k_jenis = document.getElementById('k_jenis');
   const k_jenis_tes = document.getElementById('k_jenis_tes');
-  const k_toggle_pass = document.getElementById('k_toggle_pass');
   const modalKartu = document.getElementById('modal-kartu');
   
   if (k_nama) k_nama.innerText = userData.nama_peserta;
   if (k_sekolah) k_sekolah.innerText = userData.asal_sekolah;
   if (k_user) k_user.innerText = userData.nis_username;
-  
-  // Ambil password dari berbagai sumber
-  if (window.lastRegisteredPassword) {
-    originalPassword = window.lastRegisteredPassword;
-  } 
-  else if (window.lastLoginPassword) {
-    originalPassword = window.lastLoginPassword;
-  }
-  else if (document.getElementById('r_pass') && document.getElementById('r_pass').value) {
-    originalPassword = document.getElementById('r_pass').value;
-  }
-  else if (document.getElementById('l_pass') && document.getElementById('l_pass').value) {
-    originalPassword = document.getElementById('l_pass').value;
-  }
-  else {
-    originalPassword = userData.nis_username || 'siswa123';
-  }
   
   if (k_pass) {
     k_pass.innerText = '••••••••';
@@ -3431,6 +3435,7 @@ function showKartu(userData, agendaName, token, jenisTes) {
     k_jenis_tes.style.background = getJenisTesColor(jenisTes);
   }
   
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
   if (k_toggle_pass) {
     k_toggle_pass.innerHTML = '👁️ Tampilkan';
     k_toggle_pass.style.display = 'inline-block';
@@ -3448,56 +3453,35 @@ function toggleKartuPassword() {
   
   if (!k_pass || !k_toggle_pass) return;
   
-  // Ambil password dari berbagai sumber
   let actualPassword = '';
   
-  if (window.lastRegisteredPassword) {
+  if (originalPassword) {
+    actualPassword = originalPassword;
+  } else if (window.lastRegisteredPassword) {
     actualPassword = window.lastRegisteredPassword;
   } else if (window.lastLoginPassword) {
     actualPassword = window.lastLoginPassword;
   } else if (k_pass.dataset.original) {
     actualPassword = k_pass.dataset.original;
   } else {
-    actualPassword = 'password123'; // fallback
+    actualPassword = 'password123';
   }
   
   if (k_pass.innerText === '••••••••') {
     k_pass.innerText = actualPassword;
     k_toggle_pass.innerHTML = '🙈 Sembunyikan';
     k_toggle_pass.title = 'Sembunyikan password';
+    kartuPasswordVisible = true;
   } else {
     k_pass.innerText = '••••••••';
     k_toggle_pass.innerHTML = '👁️ Tampilkan';
     k_toggle_pass.title = 'Tampilkan password';
+    kartuPasswordVisible = false;
   }
   
-  // Simpan password asli ke dataset untuk referensi
   if (!k_pass.dataset.original) {
     k_pass.dataset.original = actualPassword;
   }
-}
-
-function setKartuPassword(password) {
-  originalPassword = password;
-  
-  const k_pass = document.getElementById('k_pass');
-  if (k_pass) {
-    if (kartuPasswordVisible) {
-      k_pass.innerText = password;
-    }
-    k_pass.dataset.original = password;
-  }
-}
-
-function onRegisterSuccess(userData, password) {
-  window.lastRegisteredPassword = password;
-  window.lastRegisteredUsername = userData.nis_username;
-  setKartuPassword(password);
-}
-
-function onLoginSuccess(userData, password) {
-  window.lastLoginPassword = password;
-  setKartuPassword(password);
 }
 
 function copyKartuPassword() {
@@ -3506,11 +3490,12 @@ function copyKartuPassword() {
   
   let passwordToCopy = '';
   
-  // Ambil password yang benar
   if (k_pass.innerText !== '••••••••') {
     passwordToCopy = k_pass.innerText;
   } else if (k_pass.dataset.original) {
     passwordToCopy = k_pass.dataset.original;
+  } else if (originalPassword) {
+    passwordToCopy = originalPassword;
   } else if (window.lastRegisteredPassword) {
     passwordToCopy = window.lastRegisteredPassword;
   } else if (window.lastLoginPassword) {
@@ -3528,17 +3513,14 @@ function copyKartuPassword() {
     const copyBtn = document.getElementById('k_copy_pass');
     if (copyBtn) {
       const originalHTML = copyBtn.innerHTML;
-      const originalBg = copyBtn.style.background;
-      const originalColor = copyBtn.style.color;
-      
       copyBtn.innerHTML = '✅ Disalin!';
       copyBtn.style.background = 'var(--success)';
       copyBtn.style.color = 'white';
       
       setTimeout(() => {
         copyBtn.innerHTML = originalHTML;
-        copyBtn.style.background = originalBg;
-        copyBtn.style.color = originalColor;
+        copyBtn.style.background = '';
+        copyBtn.style.color = '';
       }, 2000);
     }
   }).catch(err => {
@@ -3546,6 +3528,55 @@ function copyKartuPassword() {
     showToast('Gagal menyalin password', 'error');
   });
 }
+
+function downloadKartu() { 
+  const kartuVisual = document.querySelector('.kartu-visual');
+  if (!kartuVisual) return;
+  
+  const wasVisible = kartuPasswordVisible;
+  const k_pass = document.getElementById('k_pass');
+  const k_toggle_pass = document.getElementById('k_toggle_pass');
+  
+  if (wasVisible && k_pass && k_toggle_pass) {
+    k_pass.innerText = '••••••••';
+    k_toggle_pass.innerHTML = '👁️ Tampilkan';
+  }
+  
+  html2canvas(kartuVisual, { 
+    scale: 2, 
+    useCORS: true, 
+    logging: false,
+    backgroundColor: '#ffffff'
+  }).then(canvas => { 
+    const link = document.createElement('a'); 
+    link.download = 'Kartu_Peserta.png'; 
+    link.href = canvas.toDataURL(); 
+    link.click(); 
+    showToast('Kartu berhasil diunduh', 'success');
+    
+    if (wasVisible && k_pass && k_toggle_pass) {
+      k_pass.innerText = originalPassword;
+      k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    }
+  }).catch(err => {
+    showToast('Gagal mengunduh kartu', 'error');
+    console.error('Download error:', err);
+    
+    if (wasVisible && k_pass && k_toggle_pass) {
+      k_pass.innerText = originalPassword;
+      k_toggle_pass.innerHTML = '🙈 Sembunyikan';
+    }
+  }); 
+}
+
+function closeKartu() { 
+  const modalKartu = document.getElementById('modal-kartu');
+  if (modalKartu) {
+    modalKartu.classList.add('hidden'); 
+  }
+  goDashboard(); 
+}
+
 /* FORGOT PASSWORD FUNCTIONS */
 function showForgotPassword() {
   const modal = document.getElementById('modal-forgot-password');
@@ -3632,8 +3663,7 @@ async function requestOTP() {
     }
   } catch (error) {
     showLoader(false);
-    showToast('Gagal mengirim OTP', 'error');
-    console.error('Request OTP error:', error);
+    showUserFriendlyError(error);
   }
 }
 
@@ -3709,8 +3739,7 @@ async function verifyOTP() {
     }
   } catch (error) {
     showLoader(false);
-    showToast('Gagal verifikasi OTP', 'error');
-    console.error('Verify OTP error:', error);
+    showUserFriendlyError(error);
   }
 }
 
@@ -3757,8 +3786,7 @@ async function resetPassword() {
     }
   } catch (error) {
     showLoader(false);
-    showToast('Gagal reset password', 'error');
-    console.error('Reset password error:', error);
+    showUserFriendlyError(error);
   }
 }
 
@@ -3774,55 +3802,7 @@ function goToLoginAfterReset() {
   showToast('Password berhasil direset. Silakan login.', 'success');
 }
 
-function downloadKartu() { 
-  const kartuVisual = document.querySelector('.kartu-visual');
-  if (!kartuVisual) return;
-  
-  const wasVisible = kartuPasswordVisible;
-  const k_pass = document.getElementById('k_pass');
-  const k_toggle_pass = document.getElementById('k_toggle_pass');
-  
-  if (wasVisible && k_pass && k_toggle_pass) {
-    k_pass.innerText = '••••••••';
-    k_toggle_pass.innerHTML = '👁️ Tampilkan';
-  }
-  
-  html2canvas(kartuVisual, { 
-    scale: 2, 
-    useCORS: true, 
-    logging: false,
-    backgroundColor: '#ffffff'
-  }).then(canvas => { 
-    const link = document.createElement('a'); 
-    link.download = 'Kartu_Peserta.png'; 
-    link.href = canvas.toDataURL(); 
-    link.click(); 
-    showToast('Kartu berhasil diunduh', 'success');
-    
-    if (wasVisible && k_pass && k_toggle_pass) {
-      k_pass.innerText = originalPassword;
-      k_toggle_pass.innerHTML = '🙈 Sembunyikan';
-    }
-  }).catch(err => {
-    showToast('Gagal mengunduh kartu', 'error');
-    console.error('Download error:', err);
-    
-    if (wasVisible && k_pass && k_toggle_pass) {
-      k_pass.innerText = originalPassword;
-      k_toggle_pass.innerHTML = '🙈 Sembunyikan';
-    }
-  }); 
-}
-
-function closeKartu() { 
-  const modalKartu = document.getElementById('modal-kartu');
-  if (modalKartu) {
-    modalKartu.classList.add('hidden'); 
-  }
-  goDashboard(); 
-}
-
-/* DASHBOARD */
+/* DASHBOARD FUNCTIONS */
 async function goDashboard() {
   goView('view-dashboard');
   
@@ -3898,6 +3878,7 @@ async function goDashboard() {
   } catch (err) {
     agendaList.innerHTML = '<div class="agenda-card" style="text-align:center; padding:30px; color:var(--primary);">Error memuat agenda</div>';
     console.error('Dashboard error:', err);
+    showUserFriendlyError(err);
   }
 }
 
@@ -3977,80 +3958,11 @@ async function verifyToken() {
     }
   } catch (error) {
     console.error('Token verification error:', error);
+    showUserFriendlyError(error);
   }
 }
 
 /* SCROLL FUNCTIONS */
-    const scrollCSS = `
-  .scroll-buttons {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 1000;
-    transition: opacity 0.3s ease;
-  }
-  
-  .scroll-btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: var(--primary);
-    color: white;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    cursor: pointer;
-    box-shadow: var(--shadow-lg);
-    transition: all var(--transition-base);
-    opacity: 0.9;
-  }
-  
-  .scroll-btn:hover {
-    background: var(--primary-dark);
-    transform: scale(1.1);
-    box-shadow: var(--shadow-xl);
-    opacity: 1;
-  }
-  
-  .scroll-btn:active {
-    transform: scale(0.95);
-  }
-  
-  .mapel-scroll-container {
-    height: calc(100vh - 64px);
-    overflow-y: auto;
-    padding: 20px;
-    scroll-behavior: smooth;
-  }
-  
-  .mapel-scroll-container::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .mapel-scroll-container::-webkit-scrollbar-track {
-    background: #f1f5f9;
-  }
-  
-  .mapel-scroll-container::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-  }
-  
-  .mapel-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-  }
-`;
-
-// Tambahkan style ini ke CSS yang ada
-const styleSheet = document.createElement("style");
-styleSheet.textContent = scrollCSS;
-document.head.appendChild(styleSheet);
-  
 function scrollToTop() {
   const container = document.getElementById('mapel-scroll-container');
   if (container) {
@@ -4084,18 +3996,14 @@ function updateScrollButtons() {
   const scrollHeight = container.scrollHeight;
   const clientHeight = container.clientHeight;
   
-  // Tampilkan tombol atas jika sudah scroll lebih dari 100px
   btnTop.style.display = scrollTop > 100 ? 'flex' : 'none';
   
-  // Tampilkan tombol bawah jika belum mencapai bagian bawah
   const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
   btnBottom.style.display = !isAtBottom ? 'flex' : 'none';
   
-  // Efek transisi halus
   btnTop.style.opacity = scrollTop > 100 ? '0.9' : '0';
   btnBottom.style.opacity = !isAtBottom ? '0.9' : '0';
   
-  // Nonaktifkan tombol jika sudah di posisi
   btnTop.disabled = scrollTop <= 100;
   btnBottom.disabled = isAtBottom;
 }
@@ -4103,32 +4011,16 @@ function updateScrollButtons() {
 function setupMapelScroll() {
   const container = document.getElementById('mapel-scroll-container');
   if (container) {
-    // Hapus event listener lama jika ada
     container.removeEventListener('scroll', updateScrollButtons);
-    
-    // Tambah event listener baru
     container.addEventListener('scroll', updateScrollButtons);
     
-    // Update tombol pertama kali
     setTimeout(() => {
       updateScrollButtons();
-      
-      // Juga update saat konten berubah
-      const observer = new MutationObserver(() => {
-        updateScrollButtons();
-      });
-      
-      observer.observe(container, { 
-        childList: true, 
-        subtree: true,
-        attributes: true,
-        characterData: true
-      });
     }, 500);
   }
 }
 
-/* MAPEL LIST */
+/* MAPEL LIST FUNCTIONS */
 async function goMapel() {
   goView('view-mapel');
   
@@ -4184,10 +4076,11 @@ async function goMapel() {
   } catch (error) {
     mapelContainer.innerHTML = '<div style="text-align:center; padding:40px; color:var(--primary);">Error memuat data</div>';
     console.error('Mapel load error:', error);
+    showUserFriendlyError(error);
   }
 }
 
-/* EXAM */
+/* EXAM FUNCTIONS */
 function startExam(mapelId) {
   pendingMapelId = mapelId;
   const rulesModal = document.getElementById('modal-start-rules');
@@ -4210,22 +4103,115 @@ function confirmStartExam() {
   initExamSession();
 }
 
-/* NAVIGATION FUNCTION (OPTIMIZED) */
+async function initExamSession() {
+  goView('view-exam');
+  
+  const e_mapel = document.getElementById('e_mapel');
+  const e_user = document.getElementById('e_user');
+  const q_area = document.getElementById('q_area');
+  
+  if (e_mapel && mapel) e_mapel.innerText = mapel.nama_mata_pelajaran; 
+  if (e_user && user) e_user.innerText = user.nama_peserta;
+  
+  if (q_area) q_area.innerHTML = `
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
+      <div class="loader-spinner" style="width:60px; height:60px;"></div>
+      <div class="loader-text" style="margin-top:20px; font-size:16px;">Mempersiapkan soal ujian...</div>
+      <div style="font-size:14px; color:var(--text-muted); margin-top:10px;">
+        Mengunduh ${pendingMapelId ? 'soal' : 'data'}...
+      </div>
+      <div id="load-progress" style="width:80%; max-width:300px; height:4px; background:var(--border); border-radius:2px; margin-top:20px; overflow:hidden;">
+        <div id="progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.3s;"></div>
+      </div>
+    </div>
+  `;
+  
+  try {
+    const progressBar = document.getElementById('progress-bar');
+    if (progressBar) progressBar.style.width = '30%';
+    
+    const result = await apiRequest('/get-soal', 'POST', {
+      agenda_id: user.id_agenda,
+      peserta_id: user.id,
+      mapel_id: pendingMapelId
+    }, {
+      showSpinner: false,
+      loadingText: 'Mengambil data soal...'
+    });
+    
+    if (!result.success) {
+      showCustomAlert('Tidak ada soal untuk mapel ini', 'Error', '❌'); 
+      goMapel(); 
+      return;
+    }
+    
+    if (progressBar) progressBar.style.width = '60%';
+    
+    mapel = result.mapel_detail;
+    questions = result.data_soal || [];
+    jawabanData = result;
+    waktuMulaiUjian = result.waktu_mulai;
+    durasiUjian = mapel.durasi_ujian || 0;
+    
+    questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
+    
+    const jawabanArray = result.jawaban_sebelumnya.split('|');
+    answers = {};
+    ragu = {};
+    
+    questions.forEach((question, index) => {
+      answers[question.id] = jawabanArray[index] || '-';
+      
+      const savedRagu = localStorage.getItem(`ragu_${user.id}_${mapel.id}_${question.id}`);
+      if (savedRagu === 'true') {
+        ragu[index] = true;
+      }
+    });
+    
+    if (progressBar) progressBar.style.width = '80%';
+    
+    setTimeout(() => preloadAllImages(), 100);
+    
+    if (progressBar) progressBar.style.width = '100%';
+    
+    setTimeout(() => {
+      qIdx = 0; 
+      
+      renderQuestion(0);
+      
+      const startTime = new Date(waktuMulaiUjian).getTime();
+      const durasiMs = (durasiUjian * 60 * 1000);
+      endTime = startTime + durasiMs;
+      
+      if (timerInt) clearInterval(timerInt); 
+      timerInt = setInterval(updateTimer, 1000);
+      
+      startAntiCheat();
+      
+      startAutoSave();
+      
+      showToast(`Selamat mengerjakan! ${questions.length} soal siap.`, 'success');
+    }, 300);
+    
+  } catch (error) { 
+    showUserFriendlyError(error); 
+    console.error('Question load error:', error); 
+  }
+}
+
+/* NAVIGATION FUNCTION */
 function nav(direction) {
   const newIndex = qIdx + direction;
   
-  // Jika melebihi batas, selesaikan ujian
   if (newIndex >= questions.length) {
     finishCheck();
     return;
   }
   
-  // Validasi index
   if (newIndex < 0 || newIndex >= questions.length) {
     return;
   }
   
-  // Animasi transisi halus
   const area = document.getElementById('q_area');
   if (area) {
     area.style.opacity = '0.7';
@@ -4239,11 +4225,10 @@ function nav(direction) {
     renderQuestion(newIndex);
   }
   
-  // Preload soal berikutnya di background
   preloadNextQuestion(newIndex);
 }
 
-/* QUESTION RENDERING FUNCTIONS (OPTIMIZED) */
+/* QUESTION RENDERING FUNCTIONS */
 function renderQuestion(idx) {
   if (idx < 0 || idx >= questions.length) return;
   
@@ -4254,11 +4239,8 @@ function renderQuestion(idx) {
   
   if (!area) return;
   
-  // Ambil nomor soal dari database (no_soal)
-  // Gunakan no_soal dari database, jika tidak ada gunakan index + 1 sebagai fallback
   const soalNumber = question.no_soal || (idx + 1);
   
-  // Tampilkan loader mini hanya jika gambar belum siap
   let imageHTML = '';
   if (question.gambar_url) {
     imageHTML = `
@@ -4286,22 +4268,17 @@ function renderQuestion(idx) {
       <div style="margin-bottom:20px;font-size:16px;line-height:1.6;">${question.pertanyaan.replace(/\n/g,'<br>')}</div>
   `;
   
-  // Semua data sudah tersedia di memory - langsung render
   area.innerHTML = html;
   
-  // Lanjutkan rendering berdasarkan tipe soal
   renderQuestionOptions(question, answer, idx);
   
-  // Render navigasi
   renderNavigation();
   
-  // Update status ragu
   const raguCheckbox = document.getElementById('chk-ragu');
   if (raguCheckbox) {
     raguCheckbox.checked = (ragu[qIdx] === true);
     raguCheckbox.onchange = () => {
       ragu[qIdx] = raguCheckbox.checked;
-      // Simpan status ragu ke localStorage
       if (user && mapel) {
         localStorage.setItem(`ragu_${user.id}_${mapel.id}_${question.id}`, raguCheckbox.checked);
       }
@@ -4309,7 +4286,6 @@ function renderQuestion(idx) {
     };
   }
   
-  // Update tombol navigasi
   const prevButton = document.getElementById('btn-prev');
   const nextButton = document.getElementById('btn-next');
   
@@ -4323,33 +4299,27 @@ function renderQuestion(idx) {
     nextButton.onclick = () => nav(1);
   }
   
-  // Untuk soal penjodohan, gambar ulang garis setelah render
   if (question.type_soal && question.type_soal.includes('Penjodohan')) {
     setTimeout(() => {
-      // Reset selection
       matchSelection = null;
       
-      // Reset kelas selected pada semua item
       document.querySelectorAll('.match-item').forEach(item => {
         item.classList.remove('selected');
       });
       
-      // Gambar ulang garis
       drawMatchLines();
     }, 100);
   }
   
-  // Log untuk debugging
   console.log(`Rendering soal ${soalNumber} (Index: ${idx + 1}/${questions.length}) - ID: ${question.id}`);
 }
+
 function renderQuestionOptions(question, answer, questionIndex) {
   const container = document.querySelector('.q-card');
   if (!container) return;
   
   let optionsHTML = '';
   const questionId = question.id;
-  
-  // Tentukan tipe soal
   const questionType = question.type_soal || 'Pilihan Ganda';
   
   if (questionType === 'Pilihan Ganda Kompleks') {
@@ -4377,7 +4347,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
       }
     });
     
-    // Tambahkan container untuk opsi
     optionsHTML = `<div class="options-container" id="options_${questionId}">${optionsHTML}</div>`;
     
   } else if (questionType.includes('Benar/Salah') || questionType.includes('Setuju/Tidak')) {
@@ -4441,7 +4410,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
     }
     
   } else if (questionType.includes('Penjodohan')) {
-    // Inisialisasi matchPairs dari jawaban
     matchPairs = {}; 
     if (answer && answer !== '-') {
       answer.split(',').forEach(pair => { 
@@ -4456,7 +4424,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
     let leftItemCount = 0;
     let rightItemCount = 0;
     
-    // Render item kiri (1, 2, 3, ...)
     for (let i = 1; i <= 8; i++) { 
       const leftValue = question['pernyataan_kiri_' + i];
       if (leftValue && leftValue.trim() !== '') {
@@ -4475,12 +4442,11 @@ function renderQuestionOptions(question, answer, questionIndex) {
       }
     }
     
-    // Render item kanan (A, B, C, ...)
     for (let i = 1; i <= 8; i++) { 
       const rightValue = question['pernyataan_kanan_' + i];
       if (rightValue && rightValue.trim() !== '') {
         rightItemCount++;
-        const rightId = String.fromCharCode(64 + i); // A, B, C, ...
+        const rightId = String.fromCharCode(64 + i);
         rightItemsHTML += `
           <div class="match-item" 
                id="right-${rightId}" 
@@ -4522,7 +4488,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
     }
     
   } else if (questionType.includes('Pilihan Ganda')) {
-    // Default: Pilihan Ganda biasa
     const options = ['a','b','c','d','e'];
     
     options.forEach(option => { 
@@ -4546,7 +4511,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
       }
     });
     
-    // Tambahkan opsi "Tidak Dijawab" jika belum ada jawaban
     if (!answer || answer === '-') {
       optionsHTML += `
         <div style="margin-top:10px; padding:10px; background:var(--primary-light); border-radius:8px; text-align:center;">
@@ -4558,7 +4522,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
     optionsHTML = `<div class="options-container" id="options_${questionId}">${optionsHTML}</div>`;
     
   } else {
-    // Tipe soal lainnya (Esai/Jawaban Singkat)
     optionsHTML = `
       <div class="options-container">
         <textarea class="form-control" 
@@ -4574,13 +4537,10 @@ function renderQuestionOptions(question, answer, questionIndex) {
     `;
   }
   
-  // Tambahkan ke container
   container.innerHTML += optionsHTML;
   
-  // Untuk soal penjodohan, gambar garis setelah elemen siap
   if (questionType.includes('Penjodohan')) {
     setTimeout(() => {
-      // Update kelas untuk item yang sudah terhubung
       Object.keys(matchPairs).forEach(leftId => {
         const leftElement = document.getElementById('left-' + leftId);
         const rightElement = document.getElementById('right-' + matchPairs[leftId]);
@@ -4589,7 +4549,6 @@ function renderQuestionOptions(question, answer, questionIndex) {
         if (rightElement) rightElement.classList.add('connected');
       });
       
-      // Gambar garis koneksi
       drawMatchLines();
     }, 150);
   }
@@ -4600,129 +4559,9 @@ function autoSaveEsai(questionId, value) {
   
   esaiTimer = setTimeout(() => {
     saveSingleAnswer(questionId, value);
-  }, 1000); // Auto-save setelah 1 detik tidak mengetik
+  }, 1000);
 }
 
-async function initExamSession() {
-  goView('view-exam');
-  
-  const e_mapel = document.getElementById('e_mapel');
-  const e_user = document.getElementById('e_user');
-  const q_area = document.getElementById('q_area');
-  
-  if (e_mapel && mapel) e_mapel.innerText = mapel.nama_mata_pelajaran; 
-  if (e_user && user) e_user.innerText = user.nama_peserta;
-  
-  // Tampilkan loader global di awal
-  if (q_area) q_area.innerHTML = `
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
-      <div class="loader-spinner" style="width:60px; height:60px;"></div>
-      <div class="loader-text" style="margin-top:20px; font-size:16px;">Mempersiapkan soal ujian...</div>
-      <div style="font-size:14px; color:var(--text-muted); margin-top:10px;">
-        Mengunduh ${pendingMapelId ? 'soal' : 'data'}...
-      </div>
-      <div id="load-progress" style="width:80%; max-width:300px; height:4px; background:var(--border); border-radius:2px; margin-top:20px; overflow:hidden;">
-        <div id="progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.3s;"></div>
-      </div>
-    </div>
-  `;
-  
-  try {
-    // Update progress bar
-    const progressBar = document.getElementById('progress-bar');
-    if (progressBar) progressBar.style.width = '30%';
-    
-    // LOAD SEMUA DATA SEKALIGUS
-    const result = await apiRequest('/get-soal', 'POST', {
-      agenda_id: user.id_agenda,
-      peserta_id: user.id,
-      mapel_id: pendingMapelId
-    }, {
-      showSpinner: false,
-      loadingText: 'Mengambil data soal...'
-    });
-    
-    if (!result.success) {
-      showCustomAlert('Tidak ada soal untuk mapel ini', 'Error', '❌'); 
-      goMapel(); 
-      return;
-    }
-    
-    // Update progress bar
-    if (progressBar) progressBar.style.width = '60%';
-    
-    // Simpan SEMUA data sekaligus
-    mapel = result.mapel_detail;
-    questions = result.data_soal || [];
-    jawabanData = result;
-    waktuMulaiUjian = result.waktu_mulai;
-    durasiUjian = mapel.durasi_ujian || 0;
-    
-    // URUTKAN SOAL BERDASARKAN no_soal DARI DATABASE
-    questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
-    
-    // Parse SEMUA jawaban sebelumnya sekaligus
-    const jawabanArray = result.jawaban_sebelumnya.split('|');
-    answers = {};
-    ragu = {}; // Reset status ragu
-    
-    // Mapping jawaban sesuai dengan urutan soal yang baru (berdasarkan no_soal)
-    // Pertama, kita perlu mendapatkan urutan soal asli dari server
-    // Asumsikan result.data_soal sudah dalam urutan berdasarkan no_soal dari database
-    // Atau kita perlu menyimpan mapping id_soal ke jawaban
-    
-    // Alternatif: Server harus mengembalikan jawaban dalam array yang sesuai dengan urutan soal
-    // Jika tidak, kita perlu membuat mapping berdasarkan id soal
-    
-    // Pendekatan: Buat mapping berdasarkan index urutan dari server
-    questions.forEach((question, index) => {
-      // Asumsikan jawabanArray sudah sesuai urutan soal dari server
-      answers[question.id] = jawabanArray[index] || '-';
-      
-      // Load status ragu dari localStorage jika ada
-      const savedRagu = localStorage.getItem(`ragu_${user.id}_${mapel.id}_${question.id}`);
-      if (savedRagu === 'true') {
-        ragu[index] = true;
-      }
-    });
-    
-    // Update progress bar
-    if (progressBar) progressBar.style.width = '80%';
-    
-    // PRELOAD semua gambar di latar belakang (tanpa menunggu)
-    setTimeout(() => preloadAllImages(), 100);
-    
-    // Update progress bar
-    if (progressBar) progressBar.style.width = '100%';
-    
-    // Tunggu sebentar untuk animasi progress bar
-    setTimeout(() => {
-      qIdx = 0; 
-      
-      // Render soal pertama
-      renderQuestion(0);
-      
-      // Hitung waktu selesai
-      const startTime = new Date(waktuMulaiUjian).getTime();
-      const durasiMs = (durasiUjian * 60 * 1000);
-      endTime = startTime + durasiMs;
-      
-      // Mulai timer
-      if (timerInt) clearInterval(timerInt); 
-      timerInt = setInterval(updateTimer, 1000);
-      
-      // Mulai anti-cheat
-      startAntiCheat();
-      
-      // Tampilkan notifikasi
-      showToast(`Selamat mengerjakan! ${questions.length} soal siap.`, 'success');
-    }, 300);
-    
-  } catch (error) { 
-    showToast('Error memuat soal: ' + error.message, 'error'); 
-    console.error('Question load error:', error); 
-  }
-}
 function updateTimer() {
   const timeLeft = endTime - Date.now(); 
   
@@ -4750,24 +4589,18 @@ function updateTimer() {
 
 /* SAVING FUNCTIONS */
 async function saveSingleAnswer(questionId, value) {
-  // Update state lokal langsung (tanpa delay)
   answers[questionId] = value;
   
-  // Update navigasi langsung
   renderNavigation();
   
-  // Tampilkan status save dengan timeout singkat
   const saveStatus = document.getElementById('save-st');
   if (saveStatus) {
     saveStatus.classList.add('show');
     
-    // Simpan ke localStorage sebagai backup
     localStorage.setItem(`answer_${user.id}_${mapel.id}_${questionId}`, value);
     
-    // Kirim ke server secara async (tanpa blokir UI)
     setTimeout(async () => {
       try {
-        // Format jawaban untuk dikirim ke server
         const jawabanArray = questions.map(q => answers[q.id] || '-');
         const jawabanString = jawabanArray.join('|');
         
@@ -4783,18 +4616,16 @@ async function saveSingleAnswer(questionId, value) {
         
       } catch (error) {
         console.error('Auto-save error:', error);
-        // Simpan ke localStorage untuk sync nanti
         localStorage.setItem(`pending_save_${user.id}_${mapel.id}`, JSON.stringify({
           answers: answers,
           timestamp: Date.now()
         }));
       } finally {
-        // Sembunyikan status save
         if (saveStatus) {
           saveStatus.classList.remove('show');
         }
       }
-    }, 300); // Delay kecil untuk menghindari spam request
+    }, 300);
   }
 }
 
@@ -4910,7 +4741,6 @@ function renderNavigation() {
     const navItem = document.createElement('div');
     navItem.className = `nav-item ${index === qIdx ? 'active' : ''} ${answers[question.id] && answers[question.id] !== '-' ? 'done' : ''} ${ragu[index] ? 'ragu' : ''}`;
     
-    // Gunakan no_soal dari database untuk tampilan navigasi
     const soalNumber = question.no_soal || (index + 1);
     navItem.innerText = soalNumber;
     navItem.onclick = () => renderQuestion(index);
@@ -4964,14 +4794,19 @@ async function finishExam(isTimeout) {
   showLoader(true, 'Mengirim jawaban...');
   
   stopAntiCheat();
+  clearBackup();
   
   if (timerInt) {
     clearInterval(timerInt);
     timerInt = null;
   }
   
+  if (autoSaveInterval) {
+    clearInterval(autoSaveInterval);
+    autoSaveInterval = null;
+  }
+  
   try {
-    // Format jawaban akhir
     const jawabanArray = questions.map(q => answers[q.id] || '-');
     const jawabanString = jawabanArray.join('|');
     
@@ -4995,6 +4830,7 @@ async function finishExam(isTimeout) {
     showLoader(false);
     showCustomAlert('Gagal mengirim jawaban', 'Error', '❌');
     console.error('Finish exam error:', error);
+    showUserFriendlyError(error);
   }
 }
 
@@ -5075,7 +4911,7 @@ function resumeFromViolation() {
   }
 }
 
-/* HISTORY */
+/* HISTORY FUNCTIONS */
 function viewHistory() { 
   goView('view-history'); 
   loadHistory(); 
@@ -5145,6 +4981,7 @@ async function loadHistory() {
   } catch (error) {
     container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--primary);">Error memuat history</div>';
     console.error('History load error:', error);
+    showUserFriendlyError(error);
   }
 }
 
@@ -5167,7 +5004,7 @@ async function viewDetailJawaban(mapelId) {
     }
   } catch (error) {
     showLoader(false);
-    showToast('Error memuat detail', 'error');
+    showUserFriendlyError(error);
     console.error('Detail load error:', error);
   }
 }
@@ -5183,7 +5020,6 @@ function renderDetailJawabanContent(examData) {
   const jawabanArray = examData.jawaban_sebelumnya.split('|');
   const questions = examData.data_soal || [];
   
-  // Urutkan soal berdasarkan no_soal
   questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
   
   let html = `
@@ -5228,7 +5064,7 @@ function renderDetailJawabanContent(examData) {
   questions.forEach((question, index) => {
     const jawaban = jawabanArray[index] || '-';
     const isDijawab = jawaban && jawaban !== '-';
-    const soalNumber = question.no_soal || (index + 1); // Gunakan no_soal dari database
+    const soalNumber = question.no_soal || (index + 1);
     
     html += `
       <div class="jawaban-item" style="margin-bottom:20px; padding-bottom:20px; border-bottom:1px solid #e2e8f0;">
@@ -5265,6 +5101,7 @@ function renderDetailJawabanContent(examData) {
     detailModal.classList.remove('hidden');
   }
 }
+
 function closeDetailJawaban() {
   const detailModal = document.getElementById('modal-detail-jawaban');
   if (detailModal) {
@@ -5290,14 +5127,13 @@ function downloadHasilUjian() {
   const jawabanArray = jawabanData.jawaban_sebelumnya.split('|');
   const questions = jawabanData.data_soal || [];
   
-  // Urutkan soal berdasarkan no_soal
   questions.sort((a, b) => parseInt(a.no_soal) - parseInt(b.no_soal));
   
   let soalHTML = '';
   questions.forEach((question, index) => {
     const jawaban = jawabanArray[index] || '-';
     const isDijawab = jawaban && jawaban !== '-';
-    const soalNumber = question.no_soal || (index + 1); // Gunakan no_soal dari database
+    const soalNumber = question.no_soal || (index + 1);
     
     soalHTML += `
       <div style="margin-bottom:25px; padding-bottom:25px; ${index < questions.length - 1 ? 'border-bottom:1px solid #ddd;' : ''}">
@@ -5384,6 +5220,14 @@ function downloadHasilUjian() {
 }
 
 /* GLOBAL FUNCTION EXPORTS */
+// Initialize on DOM ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+
+// Export semua fungsi ke window object
 window.toggleAuth = toggleAuth;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.loadAgendasIfNeeded = loadAgendasIfNeeded;
@@ -5435,20 +5279,6 @@ window.resetImageZoom = resetImageZoom;
 window.toggleKartuPassword = toggleKartuPassword;
 window.copyKartuPassword = copyKartuPassword;
 window.autoSaveEsai = autoSaveEsai;
-
-// Initialize event listeners for navigation buttons
-document.addEventListener('DOMContentLoaded', function() {
-  const prevButton = document.getElementById('btn-prev');
-  const nextButton = document.getElementById('btn-next');
-  
-  if (prevButton) {
-    prevButton.onclick = () => nav(-1);
-  }
-  
-  if (nextButton) {
-    nextButton.onclick = () => nav(1);
-  }
-});
 </script>
   <div id="modal-zoom-container" style="display:none;">
       </div>
