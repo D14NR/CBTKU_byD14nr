@@ -4,134 +4,35 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const crypto = require('crypto');
-const compression = require('compression');
 
-// Load env
+// Load env dari .env saat lokal. Di Vercel, env diambil dari Environment Variables.
 dotenv.config();
 
 const app = express();
 
-// Middleware dengan kompresi
+// Middleware
 app.use(cors());
-app.use(compression({ level: 6 }));
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '1mb' }));
 
 // Env
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Track usage untuk monitoring
-let usageStats = {
-  apiCalls: 0,
-  bandwidthEstimate: 0,
-  startTime: Date.now(),
-  lastReset: Date.now()
-};
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.warn('[WARN] SUPABASE_URL / SUPABASE_KEY belum diset. Set env di Vercel atau .env saat lokal.');
+}
 
-// Reset stats setiap hari
-setInterval(() => {
-  usageStats.apiCalls = 0;
-  usageStats.bandwidthEstimate = 0;
-  usageStats.lastReset = Date.now();
-  console.log('📊 Usage stats reset');
-}, 24 * 60 * 60 * 1000);
-
-// Middleware untuk tracking
-app.use((req, res, next) => {
-  usageStats.apiCalls++;
-  
-  const originalSend = res.send;
-  res.send = function(body) {
-    if (typeof body === 'string') {
-      usageStats.bandwidthEstimate += Buffer.byteLength(body, 'utf8');
-    } else if (Buffer.isBuffer(body)) {
-      usageStats.bandwidthEstimate += body.length;
-    } else if (typeof body === 'object') {
-      usageStats.bandwidthEstimate += Buffer.byteLength(JSON.stringify(body), 'utf8');
-    }
-    
-    // Check limits
-    if (usageStats.apiCalls > 800 && NODE_ENV === 'production') {
-      console.warn(`⚠️ API Calls: ${usageStats.apiCalls}/1000 (Vercel limit)`);
-    }
-    
-    if (usageStats.bandwidthEstimate > 1.8 * 1024 * 1024 * 1024) {
-      console.warn(`⚠️ Bandwidth: ${Math.round(usageStats.bandwidthEstimate/(1024*1024))}MB/2GB`);
-    }
-    
-    return originalSend.call(this, body);
-  };
-  
-  next();
-});
-
-// Rate limiting sederhana
-const rateLimitStore = new Map();
-const RATE_LIMIT = {
-  windowMs: 60 * 1000,
-  maxRequests: 60
-};
-
-app.use((req, res, next) => {
-  if (NODE_ENV === 'development') return next();
-  
-  const ip = req.ip || req.connection.remoteAddress;
-  const now = Date.now();
-  
-  if (!rateLimitStore.has(ip)) {
-    rateLimitStore.set(ip, { count: 1, startTime: now });
-  } else {
-    const record = rateLimitStore.get(ip);
-    
-    if (now - record.startTime > RATE_LIMIT.windowMs) {
-      record.count = 1;
-      record.startTime = now;
-    } else if (record.count >= RATE_LIMIT.maxRequests) {
-      return res.status(429).json({
-        success: false,
-        message: 'Terlalu banyak request. Tunggu 1 menit.',
-        retryAfter: Math.ceil((record.startTime + RATE_LIMIT.windowMs - now) / 1000)
-      });
-    } else {
-      record.count++;
-    }
-  }
-  
-  // Cleanup old records setiap 5 menit
-  if (Math.random() < 0.01) {
-    const cutoff = now - RATE_LIMIT.windowMs;
-    for (const [key, record] of rateLimitStore.entries()) {
-      if (record.startTime < cutoff) {
-        rateLimitStore.delete(key);
-      }
-    }
-  }
-  
-  next();
-});
-
-// Cache untuk data static
-const staticCache = {
-  agendas: null,
-  agendaMap: new Map(),
-  lastUpdated: 0,
-  TTL: 5 * 60 * 1000
-};
-
-// Helper: request ke Supabase dengan retry
-async function supabaseRequest(path, method = 'GET', query = null, body = null, retries = 2) {
+// Helper: request ke Supabase REST
+async function supabaseRequest(path, method = 'GET', query = null, body = null) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error('Server belum dikonfigurasi: SUPABASE_URL / SUPABASE_KEY kosong.');
   }
 
   const url = new URL(`${SUPABASE_URL}/rest/v1/${path}`);
-  
+
   if (query) {
     for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== null) {
-        url.searchParams.set(k, String(v));
-      }
+      url.searchParams.set(k, String(v));
     }
   }
 
@@ -141,49 +42,28 @@ async function supabaseRequest(path, method = 'GET', query = null, body = null, 
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
-      Prefer: 'return=minimal'
-    },
-    timeout: 8000
+      Prefer: 'return=representation'
+    }
   };
 
   if (body && (options.method === 'POST' || options.method === 'PATCH')) {
     options.body = JSON.stringify(body);
   }
 
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const response = await fetch(url, options);
-      
-      if (!response.ok) {
-        if (response.status === 429) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-          continue;
-        }
-        const errorBody = await response.text();
-        throw new Error(`DB Error (${response.status}): ${errorBody}`);
-      }
+  const response = await fetch(url, options);
 
-      if (response.status === 204 || options.method === 'DELETE') {
-        return null;
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        return await response.json();
-      }
-      
-      return await response.text();
-    } catch (error) {
-      if (i === retries) throw error;
-      await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
-    }
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`DB Error (${response.status}): ${errorBody}`);
   }
+
+  return response.status !== 204 ? await response.json() : null;
 }
 
 function safeUser(u) {
   if (!u) return u;
   const copy = { ...u };
-  delete copy.password;
+  delete copy.password; // jangan pernah kirim password ke client
   return copy;
 }
 
@@ -196,89 +76,29 @@ function requireFields(obj, fields) {
   return null;
 }
 
-// Router
+// Router /api
 const router = express.Router();
 
 /**
- * GET /api/usage - Monitoring endpoint
- */
-router.get('/usage', (req, res) => {
-  const now = Date.now();
-  const hoursRunning = (now - usageStats.startTime) / (1000 * 60 * 60);
-  
-  res.json({
-    success: true,
-    stats: {
-      api_calls: usageStats.apiCalls,
-      bandwidth_mb: Math.round(usageStats.bandwidthEstimate / (1024 * 1024)),
-      uptime_hours: hoursRunning.toFixed(2),
-      last_reset: new Date(usageStats.lastReset).toISOString(),
-      estimated_remaining: {
-        api_calls: Math.max(0, 1000 - usageStats.apiCalls),
-        bandwidth_mb: Math.max(0, 2048 - Math.round(usageStats.bandwidthEstimate / (1024 * 1024)))
-      }
-    },
-    limits: {
-      vercel_daily_calls: 1000,
-      supabase_bandwidth_mb: 2048,
-      vercel_timeout_seconds: 10
-    }
-  });
-});
-
-/**
- * GET /api/agenda (WITH CACHE)
+ * GET /api/agenda
  */
 router.get('/agenda', async (req, res) => {
   try {
-    const now = Date.now();
-    
-    if (staticCache.agendas && (now - staticCache.lastUpdated < staticCache.TTL)) {
-      return res.json({ 
-        success: true, 
-        data: staticCache.agendas,
-        cached: true,
-        cached_at: new Date(staticCache.lastUpdated).toISOString()
-      });
-    }
-    
+    const now = new Date().toISOString();
     const data = await supabaseRequest('agenda_ujian', 'GET', {
       select: 'id,agenda_ujian,tgljam_mulai,tgljam_selesai,token_ujian',
-      tgljam_selesai: `gte.${new Date().toISOString()}`,
-      order: 'tgljam_mulai.asc',
-      limit: 50
+      tgljam_selesai: `gte.${now}`,
+      order: 'tgljam_mulai.asc'
     });
-    
-    staticCache.agendas = data || [];
-    staticCache.agendaMap.clear();
-    data?.forEach(agenda => {
-      staticCache.agendaMap.set(agenda.id, agenda);
-    });
-    staticCache.lastUpdated = now;
-    
-    res.json({ 
-      success: true, 
-      data: staticCache.agendas,
-      cached: false
-    });
+    res.json({ success: true, data: data || [] });
   } catch (e) {
-    console.error('Agenda error:', e);
-    if (staticCache.agendas) {
-      res.json({ 
-        success: true, 
-        data: staticCache.agendas,
-        cached: true,
-        error: 'Using cached data due to error',
-        cached_at: new Date(staticCache.lastUpdated).toISOString()
-      });
-    } else {
-      res.status(500).json({ success: false, message: e.message });
-    }
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
   }
 });
 
 /**
- * POST /api/register
+ * POST /api/register  (PLAINTEXT PASSWORD)
  */
 router.post('/register', async (req, res) => {
   const form = req.body || {};
@@ -299,6 +119,7 @@ router.post('/register', async (req, res) => {
     const username = String(form.username).trim();
     const noWa = String(form.no_wa).trim();
 
+    // basic sanitasi agar query Supabase "or" tidak aneh
     if (!/^[0-9A-Za-z_+.-]{3,50}$/.test(username) && !/^[0-9]{8,20}$/.test(username)) {
       return res.status(400).json({ success: false, message: 'Username tidak valid' });
     }
@@ -313,10 +134,11 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username/WA sudah terdaftar!' });
     }
 
+    // TANPA HASH: simpan password apa adanya (plaintext)
     const payload = {
       nama_peserta: String(form.nama).toUpperCase(),
       nis_username: username,
-      password: String(form.password),
+      password: String(form.password), // PLAINTEXT
       jenjang_studi: String(form.jenjang),
       kelas: String(form.kelas),
       asal_sekolah: String(form.sekolah),
@@ -331,20 +153,14 @@ router.post('/register', async (req, res) => {
     let namaAgenda = '-';
     let tokenAgenda = '';
     if (form.agenda_id) {
-      const agenda = staticCache.agendaMap.get(form.agenda_id.toString());
-      if (agenda) {
-        namaAgenda = agenda.agenda_ujian;
-        tokenAgenda = agenda.token_ujian || '';
-      } else {
-        const ag = await supabaseRequest('agenda_ujian', 'GET', {
-          select: 'agenda_ujian,token_ujian',
-          id: `eq.${form.agenda_id}`,
-          limit: 1
-        });
-        if (ag && ag.length > 0) {
-          namaAgenda = ag[0].agenda_ujian;
-          tokenAgenda = ag[0].token_ujian || '';
-        }
+      const ag = await supabaseRequest('agenda_ujian', 'GET', {
+        select: 'agenda_ujian,token_ujian',
+        id: `eq.${form.agenda_id}`,
+        limit: 1
+      });
+      if (ag && ag.length > 0) {
+        namaAgenda = ag[0].agenda_ujian;
+        tokenAgenda = ag[0].token_ujian || '';
       }
     }
 
@@ -361,7 +177,8 @@ router.post('/register', async (req, res) => {
 });
 
 /**
- * POST /api/login
+ * POST /api/login  (PLAINTEXT PASSWORD)
+ * body: { u, p }
  */
 router.post('/login', async (req, res) => {
   const { u, p } = req.body || {};
@@ -369,7 +186,9 @@ router.post('/login', async (req, res) => {
     if (!u || !p) return res.status(400).json({ success: false, message: 'User & password wajib diisi' });
 
     const userList = await supabaseRequest('peserta', 'GET', {
-      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
+      // ambil kolom yang perlu + password untuk dicek
+      select:
+        'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status,password',
       or: `(nis_username.eq.${u},no_wa_peserta.eq.${u})`,
       limit: 1
     });
@@ -384,24 +203,21 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Akun Nonaktif/Blokir' });
     }
 
+    // TANPA HASH: cocokkan string langsung
     if (String(user.password || '') !== String(p)) {
       return res.status(401).json({ success: false, message: 'Password salah' });
     }
 
+    // Dapatkan info agenda untuk token
     let tokenAgenda = '';
     if (user.id_agenda) {
-      const agenda = staticCache.agendaMap.get(user.id_agenda.toString());
-      if (agenda) {
-        tokenAgenda = agenda.token_ujian || '';
-      } else {
-        const ag = await supabaseRequest('agenda_ujian', 'GET', {
-          select: 'token_ujian',
-          id: `eq.${user.id_agenda}`,
-          limit: 1
-        });
-        if (ag && ag.length > 0) {
-          tokenAgenda = ag[0].token_ujian || '';
-        }
+      const ag = await supabaseRequest('agenda_ujian', 'GET', {
+        select: 'token_ujian',
+        id: `eq.${user.id_agenda}`,
+        limit: 1
+      });
+      if (ag && ag.length > 0) {
+        tokenAgenda = ag[0].token_ujian || '';
       }
     }
 
@@ -418,12 +234,14 @@ router.post('/login', async (req, res) => {
 
 /**
  * POST /api/forgot-password
+ * Minta reset password (kirim kode OTP)
  */
 router.post('/forgot-password', async (req, res) => {
   const { username } = req.body || {};
   try {
     if (!username) return res.status(400).json({ success: false, message: 'Username/Nomor WA wajib diisi' });
 
+    // Cari user berdasarkan username/no WA
     const userList = await supabaseRequest('peserta', 'GET', {
       select: 'id,nama_peserta,nis_username,no_wa_peserta',
       or: `(nis_username.eq.${username},no_wa_peserta.eq.${username})`,
@@ -436,9 +254,11 @@ router.post('/forgot-password', async (req, res) => {
 
     const user = userList[0];
     
+    // Generate OTP 6 digit
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiry = new Date(Date.now() + 10 * 60000);
+    const otpExpiry = new Date(Date.now() + 10 * 60000); // 10 menit dari sekarang
     
+    // Simpan OTP ke database
     await supabaseRequest(
       'password_reset',
       'POST',
@@ -453,11 +273,14 @@ router.post('/forgot-password', async (req, res) => {
       }
     );
 
+    // NOTE: Dalam implementasi nyata, OTP dikirim via SMS/WhatsApp/Email
+    // Di sini kita hanya return di response untuk testing
     console.log(`OTP untuk ${user.nis_username}: ${otp} (valid 10 menit)`);
 
     res.json({ 
       success: true, 
       message: 'Kode OTP telah dikirim',
+      // Hanya untuk development/testing, hapus di production
       otp: process.env.NODE_ENV === 'development' ? otp : undefined,
       user_id: user.id,
       nama: user.nama_peserta
@@ -470,12 +293,14 @@ router.post('/forgot-password', async (req, res) => {
 
 /**
  * POST /api/verify-otp
+ * Verifikasi OTP
  */
 router.post('/verify-otp', async (req, res) => {
   const { user_id, otp } = req.body || {};
   try {
     if (!user_id || !otp) return res.status(400).json({ success: false, message: 'User ID dan OTP wajib diisi' });
 
+    // Cari OTP yang valid
     const otpList = await supabaseRequest('password_reset', 'GET', {
       select: 'id,otp_code,expires_at,status',
       user_id: `eq.${user_id}`,
@@ -503,6 +328,7 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Kode OTP sudah kadaluarsa' });
     }
 
+    // Update status OTP menjadi verified
     await supabaseRequest(
       'password_reset',
       'PATCH',
@@ -510,8 +336,9 @@ router.post('/verify-otp', async (req, res) => {
       { status: 'verified', verified_at: new Date().toISOString() }
     );
 
+    // Generate reset token untuk reset password
     const resetToken = crypto.randomBytes(32).toString('hex');
-    const tokenExpiry = new Date(Date.now() + 30 * 60000);
+    const tokenExpiry = new Date(Date.now() + 30 * 60000); // 30 menit
 
     await supabaseRequest(
       'password_reset',
@@ -537,6 +364,7 @@ router.post('/verify-otp', async (req, res) => {
 
 /**
  * POST /api/reset-password
+ * Reset password dengan token
  */
 router.post('/reset-password', async (req, res) => {
   const { reset_token, new_password, confirm_password } = req.body || {};
@@ -553,6 +381,7 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password minimal 6 karakter' });
     }
 
+    // Cari reset token yang valid
     const resetList = await supabaseRequest('password_reset', 'GET', {
       select: 'id,user_id,reset_token,token_expires_at,status',
       reset_token: `eq.${reset_token}`,
@@ -578,13 +407,16 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Token reset sudah kadaluarsa' });
     }
 
+    // TANPA HASH: simpan password plaintext
+    // Update password user
     await supabaseRequest(
       'peserta',
       'PATCH',
       { id: `eq.${resetData.user_id}` },
-      { password: String(new_password) }
+      { password: String(new_password) } // PLAINTEXT
     );
 
+    // Update status reset menjadi completed
     await supabaseRequest(
       'password_reset',
       'PATCH',
@@ -605,13 +437,12 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-/**
- * POST /api/cleanup-expired-resets
- */
+// Endpoint untuk membersihkan data reset password yang expired
 router.post('/cleanup-expired-resets', async (req, res) => {
   try {
     const now = new Date().toISOString();
     
+    // Update status yang expired
     await supabaseRequest(
       'password_reset',
       'PATCH',
@@ -622,6 +453,7 @@ router.post('/cleanup-expired-resets', async (req, res) => {
       { status: 'expired' }
     );
     
+    // Hapus data yang sudah completed lebih dari 7 hari
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     await supabaseRequest(
       'password_reset',
@@ -641,27 +473,22 @@ router.post('/cleanup-expired-resets', async (req, res) => {
 
 /**
  * POST /api/verify-token
+ * body: { agenda_id, token }
  */
 router.post('/verify-token', async (req, res) => {
   const { agenda_id, token } = req.body || {};
   try {
     if (!agenda_id || !token) return res.status(400).json({ success: false, message: 'agenda_id & token wajib' });
 
-    let agendaToken = '';
-    const agenda = staticCache.agendaMap.get(agenda_id.toString());
-    if (agenda) {
-      agendaToken = agenda.token_ujian || '';
-    } else {
-      const ag = await supabaseRequest('agenda_ujian', 'GET', {
-        select: 'token_ujian,agenda_ujian',
-        id: `eq.${agenda_id}`,
-        limit: 1
-      });
-      if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
-      agendaToken = ag[0].token_ujian || '';
-    }
+    const ag = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'token_ujian,agenda_ujian',
+      id: `eq.${agenda_id}`,
+      limit: 1
+    });
 
-    if (String(agendaToken).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
+    if (!ag || ag.length === 0) return res.status(400).json({ success: false, message: 'Agenda error' });
+
+    if (String(ag[0].token_ujian).trim().toUpperCase() !== String(token).trim().toUpperCase()) {
       return res.status(400).json({ success: false, message: 'Token Salah!' });
     }
 
@@ -673,7 +500,7 @@ router.post('/verify-token', async (req, res) => {
 });
 
 /**
- * GET /api/mapel
+ * GET /api/mapel?agenda_id=...&peserta_id=...
  */
 router.get('/mapel', async (req, res) => {
   const { agenda_id, peserta_id } = req.query || {};
@@ -682,21 +509,22 @@ router.get('/mapel', async (req, res) => {
       return res.status(400).json({ success: false, message: 'agenda_id & peserta_id wajib' });
     }
 
-    const [mapelList, jawabanSiswa] = await Promise.all([
-      supabaseRequest('mata_pelajaran', 'GET', {
-        select: 'id,nama_mata_pelajaran,jumlah_soal,durasi_ujian',
-        id_agenda: `eq.${agenda_id}`,
-        status_mapel: 'eq.Siap',
-        order: 'id.asc'
-      }),
-      supabaseRequest('jawaban', 'GET', {
-        select: 'id_mapel,status',
-        id_agenda: `eq.${agenda_id}`,
-        id_peserta: `eq.${peserta_id}`
-      })
-    ]);
+    const mapelList = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id,nama_mata_pelajaran,jumlah_soal,durasi_ujian',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: 'eq.Siap',
+      order: 'id.asc'
+    });
 
-    const finalData = (mapelList || []).map((m) => {
+    if (!mapelList) return res.json({ success: true, data: [] });
+
+    const jawabanSiswa = await supabaseRequest('jawaban', 'GET', {
+      select: 'id_mapel,status',
+      id_agenda: `eq.${agenda_id}`,
+      id_peserta: `eq.${peserta_id}`
+    });
+
+    const finalData = mapelList.map((m) => {
       const jwb = jawabanSiswa ? jawabanSiswa.find((j) => String(j.id_mapel) === String(m.id)) : null;
       return { ...m, status_kerjakan: jwb ? jwb.status : 'Belum' };
     });
@@ -709,125 +537,9 @@ router.get('/mapel', async (req, res) => {
 });
 
 /**
- * POST /api/get-soal-chunked - OPTIMIZED
- */
-router.post('/get-soal-chunked', async (req, res) => {
-  const { agenda_id, peserta_id, mapel_id, chunk = 0, chunk_size = 30 } = req.body;
-  
-  try {
-    if (!agenda_id || !peserta_id || !mapel_id) {
-      return res.status(400).json({ success: false, message: 'Data tidak lengkap' });
-    }
-
-    // 1. Get mapel info
-    const mapelRes = await supabaseRequest('mata_pelajaran', 'GET', {
-      select: 'id,nama_mata_pelajaran,durasi_ujian',
-      id: `eq.${mapel_id}`,
-      limit: 1
-    });
-    
-    if (!mapelRes || mapelRes.length === 0) {
-      throw new Error('Mapel tidak ditemukan');
-    }
-    
-    const mapel = mapelRes[0];
-
-    // 2. Get user & agenda info (parallel)
-    const [userRes, agendaRes, jRes] = await Promise.all([
-      supabaseRequest('peserta', 'GET', { 
-        select: 'nama_peserta', 
-        id: `eq.${peserta_id}`, 
-        limit: 1 
-      }),
-      supabaseRequest('agenda_ujian', 'GET', { 
-        select: 'agenda_ujian', 
-        id: `eq.${agenda_id}`, 
-        limit: 1 
-      }),
-      supabaseRequest('jawaban', 'GET', {
-        select: 'id,jawaban,tgljam_mulai,status',
-        id_peserta: `eq.${peserta_id}`,
-        id_mapel: `eq.${mapel_id}`,
-        limit: 1
-      })
-    ]);
-
-    let status = 'Baru';
-    let jawabanStr = '';
-    let waktuMulai = new Date().toISOString();
-
-    if (jRes && jRes.length > 0) {
-      status = jRes[0].status === 'Selesai' ? 'Selesai' : 'Lanjut';
-      jawabanStr = jRes[0].jawaban || '';
-      waktuMulai = jRes[0].tgljam_mulai;
-    } else {
-      // Create default answer string for 500 questions
-      jawabanStr = Array(500).fill('-').join('|');
-      await supabaseRequest('jawaban', 'POST', null, {
-        id_peserta: peserta_id,
-        id_agenda: agenda_id,
-        id_mapel: mapel_id,
-        nama_peserta_snap: userRes?.[0]?.nama_peserta || '-',
-        nama_agenda_snap: agendaRes?.[0]?.agenda_ujian || '-',
-        nama_mapel_snap: mapel.nama_mata_pelajaran,
-        jawaban: jawabanStr,
-        tgljam_login: waktuMulai,
-        tgljam_mulai: waktuMulai,
-        status: 'Proses'
-      });
-    }
-
-    // 3. Count total questions
-    const countRes = await supabaseRequest('bank_soal', 'GET', {
-      select: 'id',
-      id_mapel: `eq.${mapel_id}`,
-      limit: 1
-    });
-
-    const totalSoal = countRes?.length || 0;
-
-    // 4. Get chunk of questions
-    const soal = await supabaseRequest('bank_soal', 'GET', {
-      select: 'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
-      id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc',
-      limit: chunk_size,
-      offset: chunk * chunk_size
-    });
-
-    // Optimize Google Drive URLs
-    const optimizedSoal = (soal || []).map(s => {
-      const optimized = { ...s };
-      if (optimized.gambar_url && optimized.gambar_url.includes('drive.google.com')) {
-        const match = optimized.gambar_url.match(/\/d\/([^\/]+)/);
-        if (match) {
-          optimized.thumbnail_url = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
-        }
-      }
-      return optimized;
-    });
-
-    res.json({
-      success: true,
-      status,
-      waktu_mulai: waktuMulai,
-      jawaban_sebelumnya: jawabanStr,
-      mapel_detail: mapel,
-      chunk,
-      chunk_size,
-      total_chunks: Math.ceil(totalSoal / chunk_size),
-      total_soal: totalSoal,
-      data_soal: optimizedSoal
-    });
-
-  } catch (e) {
-    console.error('Chunk error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/get-soal (original - keep for compatibility)
+ * POST /api/get-soal
+ * body: { agenda_id, peserta_id, mapel_id }
+ * PERUBAHAN: Hanya ambil field yang ada di database
  */
 router.post('/get-soal', async (req, res) => {
   const { agenda_id, peserta_id, mapel_id } = req.body || {};
@@ -844,19 +556,19 @@ router.post('/get-soal', async (req, res) => {
     if (!mapelRes || mapelRes.length === 0) throw new Error('Mapel Invalid');
     const mapel = mapelRes[0];
 
-    const [pRes, aRes] = await Promise.all([
-      supabaseRequest('peserta', 'GET', { select: 'nama_peserta', id: `eq.${peserta_id}`, limit: 1 }),
-      supabaseRequest('agenda_ujian', 'GET', { select: 'agenda_ujian', id: `eq.${agenda_id}`, limit: 1 })
-    ]);
-    
+    const pRes = await supabaseRequest('peserta', 'GET', { select: 'nama_peserta', id: `eq.${peserta_id}`, limit: 1 });
+    const aRes = await supabaseRequest('agenda_ujian', 'GET', { select: 'agenda_ujian', id: `eq.${agenda_id}`, limit: 1 });
     const namaP = pRes?.[0]?.nama_peserta || '-';
     const namaA = aRes?.[0]?.agenda_ujian || '-';
 
+    // AMBIL SEMUA FIELD YANG ADA DI DATABASE - HANYA FIELD YANG DIPERLUKAN
+    // Hapus gambar_a, gambar_b, gambar_c, gambar_d, gambar_e jika tidak ada di database
     const soal = await supabaseRequest('bank_soal', 'GET', {
-      select: 'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
+      select:
+        'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
       id_mapel: `eq.${mapel_id}`,
-      order: 'no_soal.asc',
-      limit: 100
+      order: 'no_soal.asc', // URUTKAN BERDASARKAN no_soal
+      limit: 500
     });
 
     const jRes = await supabaseRequest('jawaban', 'GET', {
@@ -890,17 +602,11 @@ router.post('/get-soal', async (req, res) => {
       });
     }
 
-    // Optimize Google Drive URLs
-    const optimizedSoal = (soal || []).map(s => {
-      const optimized = { ...s };
-      if (optimized.gambar_url && optimized.gambar_url.includes('drive.google.com')) {
-        const match = optimized.gambar_url.match(/\/d\/([^\/]+)/);
-        if (match) {
-          optimized.thumbnail_url = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w800`;
-        }
-      }
-      return optimized;
-    });
+    // Log untuk debugging
+    console.log(`[GET-SOAL] Mapel: ${mapel.nama_mata_pelajaran}, Jumlah soal: ${soal ? soal.length : 0}`);
+    if (soal && soal.length > 0) {
+      console.log(`[GET-SOAL] Sample soal pertama - ID: ${soal[0].id}, No Soal: ${soal[0].no_soal}`);
+    }
 
     res.json({
       success: true,
@@ -908,7 +614,7 @@ router.post('/get-soal', async (req, res) => {
       waktu_mulai: waktuMulai,
       jawaban_sebelumnya: jwbStr,
       mapel_detail: mapel,
-      data_soal: optimizedSoal || []
+      data_soal: soal || []
     });
   } catch (e) {
     console.error('Error di /get-soal:', e);
@@ -917,64 +623,8 @@ router.post('/get-soal', async (req, res) => {
 });
 
 /**
- * POST /api/save-jawaban-chunk
- */
-router.post('/save-jawaban-chunk', async (req, res) => {
-  const { pid, aid, mid, chunk_index, chunk_data } = req.body;
-  
-  try {
-    if (!pid || !aid || !mid || chunk_index === undefined) {
-      return res.status(400).json({ success: false, message: 'Data tidak lengkap' });
-    }
-
-    const jRes = await supabaseRequest('jawaban', 'GET', {
-      select: 'jawaban',
-      id_peserta: `eq.${pid}`,
-      id_mapel: `eq.${mid}`,
-      limit: 1
-    });
-
-    if (!jRes || jRes.length === 0) {
-      return res.status(404).json({ success: false, message: 'Data jawaban tidak ditemukan' });
-    }
-
-    const currentAnswers = jRes[0].jawaban.split('|');
-    const CHUNK_SIZE = 30;
-    const startIdx = chunk_index * CHUNK_SIZE;
-    
-    for (let i = 0; i < chunk_data.length && (startIdx + i) < currentAnswers.length; i++) {
-      if (chunk_data[i] !== undefined && chunk_data[i] !== null) {
-        currentAnswers[startIdx + i] = chunk_data[i];
-      }
-    }
-
-    const updatedAnswer = currentAnswers.join('|');
-
-    await supabaseRequest(
-      'jawaban',
-      'PATCH',
-      {
-        id_peserta: `eq.${pid}`,
-        id_mapel: `eq.${mid}`
-      },
-      { jawaban: updatedAnswer }
-    );
-
-    res.json({ 
-      success: true, 
-      chunk_saved: chunk_index,
-      total_answers: currentAnswers.length,
-      unsaved_count: currentAnswers.filter(a => a === '-').length
-    });
-
-  } catch (e) {
-    console.error('Save chunk error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/save-jawaban (original)
+ * POST /api/save-jawaban
+ * body: { pid, aid, mid, jwb }
  */
 router.post('/save-jawaban', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
@@ -1001,6 +651,7 @@ router.post('/save-jawaban', async (req, res) => {
 
 /**
  * POST /api/selesai-ujian
+ * body: { pid, aid, mid, jwb }
  */
 router.post('/selesai-ujian', async (req, res) => {
   const { pid, aid, mid, jwb } = req.body || {};
@@ -1030,236 +681,492 @@ router.post('/selesai-ujian', async (req, res) => {
 });
 
 /**
- * POST /api/cleanup-answers
- */
-router.post('/cleanup-answers', async (req, res) => {
-  try {
-    // Archive jawaban yang sudah selesai > 7 hari
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    
-    const oldAnswers = await supabaseRequest('jawaban', 'GET', {
-      select: 'id,id_peserta,id_mapel,jawaban,tgljam_selesai,status',
-      status: `eq.Selesai`,
-      tgljam_selesai: `lt.${sevenDaysAgo}`,
-      limit: 100
-    });
-
-    let archivedCount = 0;
-    if (oldAnswers && oldAnswers.length > 0) {
-      for (const answer of oldAnswers) {
-        try {
-          await supabaseRequest('jawaban_archive', 'POST', null, answer);
-          await supabaseRequest('jawaban', 'DELETE', { id: `eq.${answer.id}` });
-          archivedCount++;
-        } catch (error) {
-          console.error('Failed to archive answer:', answer.id, error);
-        }
-      }
-    }
-
-    // Cleanup password_reset yang expired
-    const expiredResets = await supabaseRequest('password_reset', 'GET', {
-      select: 'id',
-      or: `(status.eq.expired,expires_at.lt.${new Date().toISOString()})`,
-      limit: 100
-    });
-
-    let cleanedCount = 0;
-    if (expiredResets && expiredResets.length > 0) {
-      for (const reset of expiredResets) {
-        try {
-          await supabaseRequest('password_reset', 'DELETE', { id: `eq.${reset.id}` });
-          cleanedCount++;
-        } catch (error) {
-          console.error('Failed to delete reset:', reset.id, error);
-        }
-      }
-    }
-
-    res.json({ 
-      success: true, 
-      archived: archivedCount,
-      cleaned: cleanedCount,
-      message: `Archived ${archivedCount} answers, cleaned ${cleanedCount} reset records`
-    });
-
-  } catch (e) {
-    console.error('Cleanup error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * GET /api/optimize-image
- */
-router.get('/optimize-image', async (req, res) => {
-  const { url } = req.query;
-  
-  if (!url || !url.includes('drive.google.com')) {
-    return res.json({ success: false, message: 'URL Google Drive diperlukan' });
-  }
-
-  try {
-    let fileId;
-    
-    const match1 = url.match(/\/d\/([^\/]+)/);
-    if (match1) {
-      fileId = match1[1];
-    }
-    
-    const match2 = url.match(/[?&]id=([^&]+)/);
-    if (match2) {
-      fileId = match2[1];
-    }
-    
-    if (!fileId) {
-      return res.json({ success: false, message: 'Tidak dapat mengekstrak file ID' });
-    }
-    
-    const optimized = {
-      original: url,
-      thumbnail: `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`,
-      medium: `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
-      large: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`,
-      download: `https://drive.google.com/uc?export=download&id=${fileId}`,
-      file_id: fileId
-    };
-    
-    res.json({ success: true, data: optimized });
-    
-  } catch (e) {
-    console.error('Optimize error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
- * POST /api/batch-register (for testing only)
- */
-router.post('/batch-register', async (req, res) => {
-  if (NODE_ENV !== 'development') {
-    return res.status(403).json({ success: false, message: 'Hanya untuk development' });
-  }
-  
-  const { count = 10, agenda_id } = req.body;
-  
-  if (!agenda_id) {
-    return res.status(400).json({ success: false, message: 'agenda_id diperlukan' });
-  }
-  
-  try {
-    const results = [];
-    const batchSize = 5;
-    
-    for (let i = 0; i < count; i += batchSize) {
-      const batchPromises = [];
-      
-      for (let j = 0; j < batchSize && (i + j) < count; j++) {
-        const userNum = i + j + 1;
-        const payload = {
-          agenda_id: agenda_id,
-          nama: `User Test ${userNum}`,
-          jenjang: 'SMA',
-          kelas: `X IPA ${(userNum % 5) + 1}`,
-          sekolah: 'SMA Test',
-          no_wa: `6281234567${String(userNum).padStart(3, '0')}`,
-          wa_ortu: `6287654321${String(userNum).padStart(3, '0')}`,
-          password: 'password123',
-          username: `testuser${userNum}`
-        };
-        
-        batchPromises.push(
-          supabaseRequest('peserta', 'POST', null, payload)
-            .then(data => ({ success: true, data: data?.[0] }))
-            .catch(error => ({ success: false, error: error.message }))
-        );
-      }
-      
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    const successCount = results.filter(r => r.success).length;
-    
-    res.json({
-      success: true,
-      registered: successCount,
-      failed: count - successCount,
-      results: results.slice(0, 10)
-    });
-    
-  } catch (e) {
-    console.error('Batch register error:', e);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-/**
  * GET /api/health
+ * Endpoint untuk cek kesehatan server
  */
 router.get('/health', (req, res) => {
-  const memoryUsage = process.memoryUsage();
-  
   res.json({
     success: true,
     message: 'Server berjalan dengan baik',
     timestamp: new Date().toISOString(),
-    environment: {
-      node_env: NODE_ENV,
-      supabase_configured: !!(SUPABASE_URL && SUPABASE_KEY)
-    },
-    stats: {
-      api_calls: usageStats.apiCalls,
-      bandwidth_mb: Math.round(usageStats.bandwidthEstimate / (1024 * 1024)),
-      uptime_hours: (Date.now() - usageStats.startTime) / (1000 * 60 * 60)
-    },
-    memory: {
-      rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
-      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
-      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`
+    env: {
+      supabase_url: SUPABASE_URL ? 'Terisi' : 'Kosong',
+      node_env: process.env.NODE_ENV || 'development'
     }
   });
 });
 
+// ==================== OFFLINE-FIRST ENDPOINTS (BARU) ====================
+
 /**
- * GET /api/stats/agenda/:id
+ * POST /api/download-all-exam-data
+ * Download SEMUA data untuk offline usage
  */
-router.get('/stats/agenda/:id', async (req, res) => {
+router.post('/download-all-exam-data', async (req, res) => {
+  const { agenda_id, peserta_id } = req.body || {};
+  
   try {
-    const agendaId = req.params.id;
+    if (!agenda_id || !peserta_id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'agenda_id & peserta_id wajib' 
+      });
+    }
+
+    console.log(`[OFFLINE] Download data untuk agenda ${agenda_id}, user ${peserta_id}`);
     
-    const [pesertaCount, mapelCount, jawabanCount] = await Promise.all([
+    // 1. Get user profile
+    const userRes = await supabaseRequest('peserta', 'GET', {
+      select: 'id,nama_peserta,nis_username,jenjang_studi,kelas,asal_sekolah,no_wa_peserta,no_wa_ortu,id_agenda,status',
+      id: `eq.${peserta_id}`,
+      limit: 1
+    });
+    
+    if (!userRes || userRes.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User tidak ditemukan' 
+      });
+    }
+    
+    const user = userRes[0];
+    
+    // 2. Get agenda details
+    const agendaRes = await supabaseRequest('agenda_ujian', 'GET', {
+      select: 'id,agenda_ujian,tgljam_mulai,tgljam_selesai,token_ujian',
+      id: `eq.${agenda_id}`,
+      limit: 1
+    });
+    
+    if (!agendaRes || agendaRes.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Agenda tidak ditemukan' 
+      });
+    }
+    
+    const agenda = agendaRes[0];
+    
+    // 3. Get all mapel for this agenda
+    const mapelRes = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id,nama_mata_pelajaran,jumlah_soal,durasi_ujian,status_mapel',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: 'eq.Siap',
+      order: 'id.asc'
+    });
+    
+    const mapelList = mapelRes || [];
+    
+    // 4. Get ALL soal for all mapel
+    const allSoal = {};
+    
+    for (const mapel of mapelList) {
+      try {
+        const soalRes = await supabaseRequest('bank_soal', 'GET', {
+          select: 'id,pertanyaan,type_soal,no_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,pilihan_e,gambar_url,pernyataan_1,pernyataan_2,pernyataan_3,pernyataan_4,pernyataan_5,pernyataan_6,pernyataan_7,pernyataan_8,pernyataan_kiri_1,pernyataan_kiri_2,pernyataan_kiri_3,pernyataan_kiri_4,pernyataan_kiri_5,pernyataan_kiri_6,pernyataan_kiri_7,pernyataan_kiri_8,pernyataan_kanan_1,pernyataan_kanan_2,pernyataan_kanan_3,pernyataan_kanan_4,pernyataan_kanan_5,pernyataan_kanan_6,pernyataan_kanan_7,pernyataan_kanan_8',
+          id_mapel: `eq.${mapel.id}`,
+          order: 'no_soal.asc',
+          limit: 200
+        });
+        
+        if (soalRes && soalRes.length > 0) {
+          // Add metadata to each soal
+          const soalWithMeta = soalRes.map(soal => ({
+            ...soal,
+            mapel_id: mapel.id,
+            mapel_nama: mapel.nama_mata_pelajaran,
+            agenda_id: parseInt(agenda_id),
+            durasi_ujian: mapel.durasi_ujian
+          }));
+          
+          allSoal[mapel.id] = soalWithMeta;
+          console.log(`[OFFLINE] Downloaded ${soalRes.length} soal for mapel ${mapel.id}`);
+        } else {
+          allSoal[mapel.id] = [];
+        }
+      } catch (error) {
+        console.error(`[OFFLINE] Error downloading soal for mapel ${mapel.id}:`, error);
+        allSoal[mapel.id] = [];
+      }
+    }
+    
+    // 5. Get existing jawaban (if any)
+    const jawabanRes = await supabaseRequest('jawaban', 'GET', {
+      select: 'id_mapel,jawaban,status,tgljam_mulai',
+      id_agenda: `eq.${agenda_id}`,
+      id_peserta: `eq.${peserta_id}`
+    });
+    
+    // 6. Prepare response
+    const totalSoal = Object.values(allSoal).reduce((sum, soalList) => sum + soalList.length, 0);
+    
+    const response = {
+      success: true,
+      data: {
+        user: safeUser(user), // Gunakan safeUser untuk hapus password
+        agenda: agenda,
+        mapel_list: mapelList,
+        soal_by_mapel: allSoal,
+        existing_jawaban: jawabanRes || [],
+        summary: {
+          total_mapel: mapelList.length,
+          total_soal: totalSoal,
+          total_size_bytes: JSON.stringify(allSoal).length
+        }
+      },
+      metadata: {
+        downloaded_at: new Date().toISOString(),
+        cache_version: '1.0',
+        cache_ttl: 24 * 60 * 60, // 24 jam dalam detik
+        agenda_id: parseInt(agenda_id),
+        user_id: parseInt(peserta_id)
+      }
+    };
+    
+    console.log(`[OFFLINE] Download completed: ${totalSoal} soal, ${mapelList.length} mapel`);
+    
+    res.json(response);
+    
+  } catch (e) {
+    console.error('[OFFLINE] Download error:', e);
+    res.status(500).json({ 
+      success: false, 
+      message: e.message,
+      code: 'DOWNLOAD_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/final-submit-offline
+ * Submit final jawaban dari offline cache
+ */
+router.post('/final-submit-offline', async (req, res) => {
+  const { 
+    pid, 
+    aid, 
+    mid, 
+    jawaban_map,
+    waktu_mulai,
+    waktu_selesai,
+    duration_used,
+    device_info 
+  } = req.body || {};
+  
+  try {
+    if (!pid || !aid || !mid || !jawaban_map) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Data tidak lengkap' 
+      });
+    }
+
+    console.log(`[OFFLINE-SUBMIT] User ${pid}, Mapel ${mid}, ${Object.keys(jawaban_map).length} jawaban`);
+    
+    // 1. Cek apakah sudah ada record
+    const existingRes = await supabaseRequest('jawaban', 'GET', {
+      select: 'id,status,jawaban',
+      id_peserta: `eq.${pid}`,
+      id_mapel: `eq.${mid}`,
+      id_agenda: `eq.${aid}`,
+      limit: 1
+    });
+    
+    // 2. Get metadata untuk snapshot
+    const [userRes, agendaRes, mapelRes] = await Promise.all([
+      supabaseRequest('peserta', 'GET', { 
+        select: 'nama_peserta', 
+        id: `eq.${pid}`, 
+        limit: 1 
+      }),
+      supabaseRequest('agenda_ujian', 'GET', { 
+        select: 'agenda_ujian', 
+        id: `eq.${aid}`, 
+        limit: 1 
+      }),
+      supabaseRequest('mata_pelajaran', 'GET', { 
+        select: 'nama_mata_pelajaran', 
+        id: `eq.${mid}`, 
+        limit: 1 
+      })
+    ]);
+    
+    // 3. Convert jawaban_map ke format string
+    const jawabanArray = Object.entries(jawaban_map).map(([soal_id, jawaban]) => 
+      `${soal_id}:${jawaban}`
+    );
+    const jawabanString = jawabanArray.join('|');
+    
+    // 4. Hitung statistik
+    const totalSoal = Object.keys(jawaban_map).length;
+    const answered = Object.values(jawaban_map).filter(j => j && j !== '-').length;
+    const percentage = totalSoal > 0 ? Math.round((answered / totalSoal) * 100) : 0;
+    
+    if (existingRes && existingRes.length > 0) {
+      // Update existing
+      const existing = existingRes[0];
+      
+      // Merge dengan existing jawaban jika ada
+      let finalJawaban = jawabanString;
+      if (existing.jawaban && existing.status !== 'Selesai') {
+        const existingMap = {};
+        existing.jawaban.split('|').forEach(entry => {
+          const [soalId, jawaban] = entry.split(':');
+          if (soalId && jawaban) {
+            existingMap[soalId] = jawaban;
+          }
+        });
+        
+        // Merge (new overwrites old)
+        Object.assign(existingMap, jawaban_map);
+        
+        finalJawaban = Object.entries(existingMap)
+          .map(([soalId, jawaban]) => `${soalId}:${jawaban}`)
+          .join('|');
+      }
+      
+      await supabaseRequest('jawaban', 'PATCH', {
+        id_peserta: `eq.${pid}`,
+        id_mapel: `eq.${mid}`,
+        id_agenda: `eq.${aid}`
+      }, {
+        jawaban: finalJawaban,
+        status: 'Selesai',
+        tgljam_selesai: waktu_selesai || new Date().toISOString(),
+        durasi_digunakan: duration_used,
+        device_info: device_info || null,
+        submitted_offline: true,
+        offline_submit_time: new Date().toISOString(),
+        statistik: {
+          total_soal: totalSoal,
+          dijawab: answered,
+          persentase: percentage,
+          timestamp: new Date().toISOString()
+        }
+      });
+      
+    } else {
+      // Insert baru
+      await supabaseRequest('jawaban', 'POST', null, {
+        id_peserta: pid,
+        id_agenda: aid,
+        id_mapel: mid,
+        nama_peserta_snap: userRes?.[0]?.nama_peserta || '-',
+        nama_agenda_snap: agendaRes?.[0]?.agenda_ujian || '-',
+        nama_mapel_snap: mapelRes?.[0]?.nama_mata_pelajaran || '-',
+        jawaban: jawabanString,
+        tgljam_login: waktu_mulai || new Date().toISOString(),
+        tgljam_mulai: waktu_mulai || new Date().toISOString(),
+        tgljam_selesai: waktu_selesai || new Date().toISOString(),
+        status: 'Selesai',
+        durasi_digunakan: duration_used,
+        device_info: device_info || null,
+        submitted_offline: true,
+        offline_submit_time: new Date().toISOString(),
+        statistik: {
+          total_soal: totalSoal,
+          dijawab: answered,
+          persentase: percentage,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Jawaban berhasil disubmit',
+      statistik: {
+        total: totalSoal,
+        dijawab: answered,
+        persentase: percentage
+      },
+      submitted_at: new Date().toISOString()
+    });
+    
+  } catch (e) {
+    console.error('[OFFLINE-SUBMIT] Error:', e);
+    
+    res.status(500).json({ 
+      success: false, 
+      message: e.message,
+      code: 'SUBMIT_ERROR'
+    });
+  }
+});
+
+/**
+ * POST /api/save-jawaban-batch
+ * Simpan jawaban dalam BATCH (untuk auto-sync)
+ */
+router.post('/save-jawaban-batch', async (req, res) => {
+  const { pid, aid, mid, jawaban_map } = req.body || {};
+  
+  try {
+    if (!pid || !aid || !mid || !jawaban_map) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Data tidak lengkap' 
+      });
+    }
+
+    console.log(`[BATCH-SAVE] User ${pid}, Mapel ${mid}, ${Object.keys(jawaban_map).length} jawaban`);
+    
+    // Cek apakah sudah ada record jawaban
+    const existing = await supabaseRequest('jawaban', 'GET', {
+      select: 'id,jawaban',
+      id_peserta: `eq.${pid}`,
+      id_mapel: `eq.${mid}`,
+      id_agenda: `eq.${aid}`,
+      limit: 1
+    });
+
+    if (existing && existing.length > 0) {
+      // Parse existing jawaban
+      const existingJawaban = existing[0].jawaban.split('|');
+      const existingMap = {};
+      
+      existingJawaban.forEach(entry => {
+        const [soalId, jawaban] = entry.split(':');
+        if (soalId && jawaban) {
+          existingMap[soalId] = jawaban;
+        }
+      });
+      
+      // Merge dengan jawaban baru
+      Object.assign(existingMap, jawaban_map);
+      
+      // Convert back to string
+      const mergedJawaban = Object.entries(existingMap)
+        .map(([soalId, jawaban]) => `${soalId}:${jawaban}`)
+        .join('|');
+      
+      await supabaseRequest('jawaban', 'PATCH', {
+        id_peserta: `eq.${pid}`,
+        id_mapel: `eq.${mid}`,
+        id_agenda: `eq.${aid}`
+      }, {
+        jawaban: mergedJawaban,
+        last_sync: new Date().toISOString()
+      });
+      
+    } else {
+      // Get metadata untuk insert baru
+      const [userRes, agendaRes, mapelRes] = await Promise.all([
+        supabaseRequest('peserta', 'GET', { 
+          select: 'nama_peserta', 
+          id: `eq.${pid}`, 
+          limit: 1 
+        }),
+        supabaseRequest('agenda_ujian', 'GET', { 
+          select: 'agenda_ujian', 
+          id: `eq.${aid}`, 
+          limit: 1 
+        }),
+        supabaseRequest('mata_pelajaran', 'GET', { 
+          select: 'nama_mata_pelajaran', 
+          id: `eq.${mid}`, 
+          limit: 1 
+        })
+      ]);
+      
+      const jawabanString = Object.entries(jawaban_map)
+        .map(([soalId, jawaban]) => `${soalId}:${jawaban}`)
+        .join('|');
+      
+      await supabaseRequest('jawaban', 'POST', null, {
+        id_peserta: pid,
+        id_agenda: aid,
+        id_mapel: mid,
+        nama_peserta_snap: userRes?.[0]?.nama_peserta || '-',
+        nama_agenda_snap: agendaRes?.[0]?.agenda_ujian || '-',
+        nama_mapel_snap: mapelRes?.[0]?.nama_mata_pelajaran || '-',
+        jawaban: jawabanString,
+        tgljam_login: new Date().toISOString(),
+        tgljam_mulai: new Date().toISOString(),
+        status: 'Proses',
+        last_sync: new Date().toISOString()
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Jawaban batch berhasil disimpan',
+      count: Object.keys(jawaban_map).length,
+      synced_at: new Date().toISOString()
+    });
+
+  } catch (e) {
+    console.error('[BATCH-SAVE] Error:', e);
+    res.status(500).json({ 
+      success: false, 
+      message: e.message 
+    });
+  }
+});
+
+/**
+ * GET /api/check-offline-data
+ * Cek apakah data offline tersedia
+ */
+router.get('/check-offline-data', async (req, res) => {
+  const { agenda_id, peserta_id } = req.query || {};
+  
+  try {
+    if (!agenda_id || !peserta_id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'agenda_id & peserta_id wajib' 
+      });
+    }
+    
+    // Cek apakah user dan agenda valid
+    const [userRes, agendaRes] = await Promise.all([
       supabaseRequest('peserta', 'GET', {
         select: 'id',
-        id_agenda: `eq.${agendaId}`,
+        id: `eq.${peserta_id}`,
         limit: 1
       }),
-      supabaseRequest('mata_pelajaran', 'GET', {
+      supabaseRequest('agenda_ujian', 'GET', {
         select: 'id',
-        id_agenda: `eq.${agendaId}`,
-        limit: 1
-      }),
-      supabaseRequest('jawaban', 'GET', {
-        select: 'id',
-        id_agenda: `eq.${agendaId}`,
+        id: `eq.${agenda_id}`,
         limit: 1
       })
     ]);
     
+    const isValid = userRes && userRes.length > 0 && agendaRes && agendaRes.length > 0;
+    
+    if (!isValid) {
+      return res.json({
+        success: true,
+        available: false,
+        message: 'User atau agenda tidak valid'
+      });
+    }
+    
+    // Cek apakah ada mapel untuk agenda ini
+    const mapelRes = await supabaseRequest('mata_pelajaran', 'GET', {
+      select: 'id',
+      id_agenda: `eq.${agenda_id}`,
+      status_mapel: 'eq.Siap',
+      limit: 1
+    });
+    
+    const hasMapel = mapelRes && mapelRes.length > 0;
+    
     res.json({
       success: true,
-      agenda_id: agendaId,
-      stats: {
-        peserta: pesertaCount?.length || 0,
-        mapel: mapelCount?.length || 0,
-        jawaban: jawabanCount?.length || 0
-      }
+      available: hasMapel,
+      message: hasMapel ? 'Data tersedia untuk download' : 'Tidak ada mapel tersedia',
+      agenda_id: parseInt(agenda_id),
+      user_id: parseInt(peserta_id)
     });
+    
   } catch (e) {
-    console.error('Stats error:', e);
-    res.status(500).json({ success: false, message: e.message });
+    console.error('[CHECK-OFFLINE] Error:', e);
+    res.status(500).json({ 
+      success: false, 
+      message: e.message 
+    });
   }
 });
 
@@ -1267,54 +1174,30 @@ app.use('/api', router);
 
 // Handler untuk route yang tidak ditemukan
 app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'Endpoint tidak ditemukan',
-    path: req.path
-  });
+  res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan' });
 });
 
 // Error handler global
 app.use((err, req, res, next) => {
-  console.error('Global Error Handler:', {
-    message: err.message,
-    stack: err.stack,
-    timestamp: new Date().toISOString(),
-    path: req.path,
-    ip: req.ip
-  });
-  
+  console.error('Global Error Handler:', err);
   res.status(500).json({ 
     success: false, 
     message: 'Terjadi kesalahan internal server',
-    error: NODE_ENV === 'development' ? err.message : undefined
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
-// Local run
+// Local run (tidak dipakai di Vercel serverless)
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  
-  // Schedule cleanup setiap hari jam 3 pagi
-  if (NODE_ENV === 'production') {
-    setInterval(async () => {
-      try {
-        console.log('Running scheduled cleanup...');
-        // Anda bisa memanggil cleanup endpoint di sini
-      } catch (error) {
-        console.error('Scheduled cleanup failed:', error);
-      }
-    }, 24 * 60 * 60 * 1000);
-  }
-  
   app.listen(PORT, () => {
     console.log(`========================================`);
-    console.log(`🚀 Server CBT Ujian Online (OPTIMIZED)`);
+    console.log(`🚀 Server CBT Ujian Online (Offline-First)`);
     console.log(`📍 Port: ${PORT}`);
     console.log(`📅 ${new Date().toLocaleString('id-ID')}`);
-    console.log(`🌐 Mode: ${NODE_ENV}`);
+    console.log(`🌐 Mode: ${process.env.NODE_ENV || 'development'}`);
     console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
-    console.log(`📊 Usage stats: http://localhost:${PORT}/api/usage`);
+    console.log(`📱 Offline endpoints: /download-all-exam-data, /final-submit-offline`);
     console.log(`========================================`);
   });
 }
